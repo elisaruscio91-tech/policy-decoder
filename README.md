@@ -2,11 +2,10 @@
 
 **Trans Rights Media Literacy & Counter-Propaganda Tool**
 
-Decode anti-trans propaganda with science and evidence. Paste any text — political statements, policy documents, news articles, social media posts — and get a rigorous, evidence-based analysis.
+Decode anti-trans propaganda with science and evidence. Paste any text — or a URL — and get a rigorous, evidence-based analysis.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![React](https://img.shields.io/badge/React-18-61DAFB.svg)
-![Vite](https://img.shields.io/badge/Vite-6-646CFF.svg)
+![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)
 
 ---
 
@@ -32,123 +31,117 @@ Policy Decoder analyzes any text for anti-trans propaganda using:
 
 ### Features
 
-- 🌐 **Bilingual interface** (English / Italian) with language switcher
-- 🎯 **Output language control**: auto-detect, force English, or force Italian
-- 📝 **Pre-loaded examples** to test immediately
+- 🌐 **Bilingual interface** (English / Italian)
+- 🔗 **Paste text or analyze a URL** (server-side article extraction, no extra AI cost)
+- 🔒 **Invite-only login** (email magic link, no passwords) tied to an active subscription
+- 📊 **Monthly usage quota per user** (default 5 analyses/month) to keep AI costs predictable
+- 🛡️ **Anti brute-force/DoS protections** on login and API endpoints
+- 📈 **Usage analytics** (who used it, how often, how it performed) without storing the analyzed text
 - 🎨 **Dark editorial design** with Playfair Display + DM Sans typography
-- ⚡ **Powered by Claude API** (Sonnet 4) with structured JSON output
 
 ---
 
-## 🚀 Quick Start
+## 🏗️ Architecture
+
+Next.js 16 (App Router) on Vercel, Postgres (Neon) via Prisma, NextAuth v5 with the Resend email provider. Same security pattern as our `res-publica` project: a `WhitelistEntry` table gates login, an `EventoSicurezza` table logs every login/API attempt by IP to detect abuse.
+
+```
+src/
+  app/
+    page.tsx                 → home (protected, server component: checks session + quota)
+    accedi/page.tsx           → login (magic link)
+    api/auth/[...nextauth]/   → NextAuth handlers
+    api/analyze/route.ts      → server-side proxy to the AI provider, enforces quota + rate limit
+    api/fetch-url/route.ts    → server-side article extraction (Readability), SSRF-guarded
+    api/usage/route.ts        → current user's quota status
+  components/PolicyDecoder.tsx → the UI (client component)
+  lib/
+    auth.ts, prisma.ts, sicurezza.ts, quota.ts, motore-ia.ts, estrai-articolo.ts, prompt-sistema.ts
+  middleware.ts               → requires login on all pages except /accedi and /api
+prisma/schema.prisma
+scripts/invita-utente.ts      → add/renew a user's access (run on subscription renewal)
+```
+
+---
+
+## 🚀 Setup
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18+ installed
-- An Anthropic API key (the app runs inside Claude.ai artifacts where the key is provided automatically — for standalone deployment, see below)
+- Node.js 20+
+- A Postgres database (we use [Neon](https://neon.tech), same as res-publica — can be a second database in the same Neon project)
+- A [Resend](https://resend.com) account + verified sending domain (for magic-link emails)
+- An Anthropic API key **or** an OpenRouter API key (see "Sostenibilità dei costi" below)
 
-### Local Development
+### Local development
 
 ```bash
-# Clone the repo
-git clone https://github.com/YOUR_USERNAME/policy-decoder.git
-cd policy-decoder
-
-# Install dependencies
 npm install
-
-# Start dev server
+cp .env.example .env.local   # fill in DATABASE_URL, AUTH_SECRET, RESEND_API_KEY, AUTH_EMAIL_FROM, ANTHROPIC_API_KEY
+npx auth secret               # generates AUTH_SECRET if you don't have one
+npx prisma migrate dev        # creates tables
 npm run dev
 ```
 
-Open `http://localhost:5173` in your browser.
-
-### Build for Production
+Add yourself to the whitelist so you can log in:
 
 ```bash
-npm run build
+npm run invita -- tua-email@esempio.it 12   # 12 mesi di validità, 5 analisi/mese di default
 ```
 
-Output will be in the `dist/` folder.
+### Deploy to Vercel
+
+1. Push to GitHub (this repo).
+2. Import the project in Vercel.
+3. Set the environment variables from `.env.example` in the Vercel project settings (Production **and** Preview).
+4. Vercel auto-detects Next.js. First deploy will fail on `prisma generate` if `DATABASE_URL` isn't set — add it before deploying.
+5. Run `npx prisma migrate deploy` once against the production `DATABASE_URL` (locally, pointing at the prod DB, or via a Vercel deploy hook).
+
+**Never** set `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY` as `NEXT_PUBLIC_*` — they must stay server-only.
 
 ---
 
-## 🌍 Deploy to Vercel (Recommended — Free)
+## 💰 Sostenibilità dei costi (motore di analisi)
 
-### Option A: One-Click Deploy
+Il costo variabile di questo servizio è quasi interamente il consumo di token del modello AI. Le protezioni già in posto:
 
-1. Push this repo to GitHub
-2. Go to [vercel.com](https://vercel.com) and sign in with GitHub
-3. Click **"Add New Project"**
-4. Import your `policy-decoder` repository
-5. Vercel auto-detects Vite — just click **"Deploy"**
-6. Your site is live at `https://policy-decoder.vercel.app` (or your custom domain)
+1. **Quota mensile per utente** (`WhitelistEntry.limiteMensile`, default 5): il costo massimo per utente/mese è quindi noto e limitato a monte, indipendentemente da quanto lo usa.
+2. **Prompt tarato per essere conciso** (`prompt-sistema.ts`): output limitato a ~7000 token, niente paragrafi ridondanti.
+3. **Estrazione articoli lato server** senza chiamare il modello (Readability), invece di usare una chiamata AI con `web_search` solo per recuperare il testo — dimezza il costo per ogni analisi da URL.
 
-### Option B: Vercel CLI
+### Scelta del motore (`AI_PROVIDER`)
 
-```bash
-# Install Vercel CLI
-npm i -g vercel
+| Opzione | Costo | Qualità | Infrastruttura richiesta |
+|---|---|---|---|
+| **Anthropic (default)** | pay-per-token, il più caro dei tre | Il prompt è tarato su Claude, qualità migliore e più affidabile sul JSON strutturato | Nessuna, solo la chiave API |
+| **OpenRouter** (`AI_PROVIDER=openrouter`) | pay-per-token, modelli aperti spesso 5-10× più economici (es. Llama 3.3 70B) | Buona ma va validata sul formato JSON e sulla qualità delle citazioni — consigliato testare prima di spegnere Anthropic | Nessuna, un solo endpoint compatibile OpenAI |
+| **Ollama self-hosted** | fisso (costo del server), zero per token | Dipende dal modello scelto e dall'hardware; richiede tuning del prompt | **Una VM sempre accesa** con abbastanza RAM/GPU — **Vercel non può ospitarlo** (le funzioni serverless sono stateless e a tempo limitato, non un processo persistente). Servirebbe un piccolo VPS (Fly.io, Hetzner, un mini-PC in casa) raggiungibile dalle API route di Vercel via HTTP interno |
 
-# Deploy
-vercel
+**Raccomandazione**: restare su Anthropic con la quota mensile stretta finché il numero di abbonati è piccolo (il costo per utente è comunque limitato dal cap). Quando i volumi crescono, provare OpenRouter con un modello aperto come opzione B testandone la qualità in parallelo (basta cambiare `AI_PROVIDER` in staging). Investire in una VM per Ollama solo se il volume mensile rende conveniente un costo fisso rispetto al pay-per-token — sotto qualche centinaio di analisi/mese difficilmente conviene rispetto a OpenRouter.
 
-# Follow the prompts — it auto-detects Vite
-```
+### Ciclo di abbonamento
 
-### Option C: Netlify
+La whitelist non è collegata (ancora) a un sistema di pagamento automatico. Ad ogni rinnovo dell'abbonamento (gestito altrove, es. Stripe/bonifico):
 
 ```bash
-# Build first
-npm run build
-
-# Deploy the dist folder to Netlify
-# Or connect your GitHub repo at netlify.com
+npm run invita -- utente@esempio.it 1   # rinnova per 1 mese
 ```
 
-Netlify settings:
-- **Build command**: `npm run build`
-- **Publish directory**: `dist`
+Se l'abbonamento scade e non viene rinnovato, `scadenza` passa e il login viene rifiutato automaticamente al prossimo tentativo — nessuna azione manuale di revoca necessaria.
 
 ---
 
-## 📝 How the API Works
+## 🔒 Sicurezza
 
-The app calls the Anthropic Messages API directly from the browser. When running inside a **Claude.ai artifact**, the API key is handled automatically — no configuration needed.
-
-For **standalone deployment** outside Claude.ai, you would need to:
-
-1. Set up a small backend proxy (e.g., Vercel Serverless Function, Cloudflare Worker) that holds your API key
-2. Modify the `fetch` call in `src/App.jsx` to point to your proxy endpoint
-
-Example Vercel serverless function (`api/analyze.js`):
-
-```javascript
-export default async function handler(req, res) {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify(req.body),
-  });
-  const data = await response.json();
-  res.status(response.status).json(data);
-}
-```
-
-Then update the fetch URL in `App.jsx`:
-```javascript
-const resp = await fetch("/api/analyze", { ... });
-```
+- Login ristretto a email in whitelist attiva (magic link, nessuna password memorizzata).
+- Ogni tentativo di login e ogni chiamata a `/api/analyze` / `/api/fetch-url` è loggata per IP (`EventoSicurezza`) con rate limiting: oltre soglia, l'IP viene bloccato temporaneamente (protezione anti brute-force e DoS di base, senza servizi esterni a pagamento).
+- `/api/fetch-url` valida l'URL (solo http/https, blocco IP privati/loopback anche dopo risoluzione DNS e ad ogni redirect) per prevenire SSRF.
+- CSP stretta (`next.config.ts`): nessuna chiamata esterna dal browser, tutto passa dalle API route del server.
+- Le chiavi AI non sono mai esposte lato client.
 
 ---
 
 ## 🔬 Scientific Sources
-
-The system prompt references these key peer-reviewed sources:
 
 | Source | What it shows |
 |--------|-------------|
@@ -160,8 +153,6 @@ The system prompt references these key peer-reviewed sources:
 | **WPATH SOC-8 (2022)** | Standards of Care for transgender health |
 | **Karkazis et al.** | Testosterone not predictive of athletic performance |
 
----
-
 ## 📚 Propaganda Analysis Frameworks
 
 | Framework | Focus |
@@ -171,20 +162,6 @@ The system prompt references these key peer-reviewed sources:
 | **Cialdini** | Weapons of influence: reciprocity, commitment, social proof, authority, liking, scarcity |
 | **Arendt** | Banality of evil: normalization, us-vs-them, obedience, critical thinking erosion |
 | **Fairclough** | Critical Discourse Analysis: power relations, ideology in language, nominalization |
-
----
-
-## 🤝 Contributing
-
-Contributions welcome! Areas where help is needed:
-
-- **Additional languages** (Spanish, French, German, Portuguese)
-- **More example texts** for different countries and contexts
-- **Backend proxy** for standalone deployment
-- **Accessibility improvements**
-- **Additional scientific sources** and legal frameworks
-
-Please open an issue or PR.
 
 ---
 

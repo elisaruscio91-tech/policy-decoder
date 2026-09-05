@@ -1,0 +1,109 @@
+* { box-sizing: border-box; margin: 0; }
+
+html, body {
+  background: #060610;
+  color: #b8c0d8;
+  font-family: var(--font-dmsans), system-ui, sans-serif;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1a1a38; border-radius: 3px; }
+
+textarea:focus, select:focus, input:focus {
+  outline: none;
+  border-color: #3b82f680 !important;
+  box-shadow: 0 0 0 3px #3b82f618;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+.barra-utente {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: #3b4768;
+  border-bottom: 1px solid #10102a;
+  flex-wrap: wrap;
+}
+
+.barra-utente button {
+  background: none;
+  border: 1px solid #161634;
+  color: #C39BD3;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.pagina-login {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.pagina-login .riquadro {
+  max-width: 420px;
+  width: 100%;
+  background: #0b0b1c;
+  border: 1px solid #181836;
+  border-radius: 16px;
+  padding: 32px 28px;
+}
+
+.pagina-login h1 {
+  font-family: var(--font-playfair), Georgia, serif;
+  font-size: 24px;
+  font-weight: 900;
+  color: #f1f5f9;
+  margin-bottom: 10px;
+}
+
+.pagina-login p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #7b8ba8;
+  margin-bottom: 20px;
+}
+
+.pagina-login label {
+  display: block;
+  font-size: 12px;
+  color: #3b4768;
+  margin-bottom: 6px;
+}
+
+.pagina-login input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 14px;
+  background: #09091a;
+  border: 1.5px solid #161634;
+  border-radius: 10px;
+  color: #b8c0d8;
+  margin-bottom: 14px;
+  font-family: inherit;
+}
+
+.pagina-login button {
+  width: 100%;
+  padding: 11px;
+  border-radius: 9px;
+  border: none;
+  background: linear-gradient(135deg, #5B2C6F, #7D3C98);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}

@@ -1,0 +1,23 @@
+target/
+project/target/
+project/project/
+.bloop/
+.bsp/
+.metals/
+.vscode/
+metals.sbt
+*.class
+*.log
+.DS_Store
+
+# env files (mai committare segreti)
+.env
+.env.local
+!.env.example
+
+# JS compilato dal frontend ScalaJS, copiato qui in build (vedi Dockerfile).
+# Nessun file .js scritto a mano vive in static/, quindi ignoriamo tutti quelli
+# generati (main.js più gli eventuali moduli splittati) senza dover indovinare
+# i nomi esatti prodotti dal linker.
+modules/backend/src/main/resources/static/*.js
+modules/backend/src/main/resources/static/*.js.map

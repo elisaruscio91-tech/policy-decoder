@@ -1,0 +1,46 @@
+# Uso locale (`docker compose up`) o, in alternativa alla creazione manuale
+# dell'app in Coolify, come deploy "Docker Compose" (Coolify gestisce le
+# variabili d'ambiente sensibili dalla propria UI: non serve un file .env
+# reale accanto a questo compose in produzione).
+#
+# Se in Coolify si usa già un servizio Postgres gestito separatamente, basta
+# rimuovere il servizio "db" qui sotto e puntare DATABASE_URL a quello.
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/policy_decoder
+      JWT_SECRET: ${JWT_SECRET}
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY}
+      OLLAMA_MODEL: ${OLLAMA_MODEL}
+      DEFAULT_MONTHLY_QUOTA: ${DEFAULT_MONTHLY_QUOTA:-5}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: policy_decoder
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:

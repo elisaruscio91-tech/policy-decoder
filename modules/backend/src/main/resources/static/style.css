@@ -1,0 +1,85 @@
+/* Stile minimo: nessuna pretesa estetica, solo leggibilità. */
+
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #1a1a1a;
+}
+
+.login {
+  max-width: 360px;
+  margin: 4rem auto;
+}
+
+.login div {
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+}
+
+input, textarea, select, button {
+  font: inherit;
+  padding: 0.5rem;
+}
+
+.intestazione {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.tabs button {
+  margin-right: 0.5rem;
+}
+
+.tabs button.attivo {
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+textarea, input[type="url"] {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0.5rem 0;
+}
+
+.sezione {
+  margin: 1.5rem 0;
+  padding-top: 1rem;
+  border-top: 1px solid #ddd;
+}
+
+.quote {
+  font-style: italic;
+  color: #444;
+}
+
+.fonte {
+  font-size: 0.85em;
+  color: #666;
+}
+
+.slides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.slide {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem;
+  width: 220px;
+}
+
+.errore {
+  color: #b00020;
+}
+
+.in-corso {
+  color: #666;
+}

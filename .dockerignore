@@ -1,0 +1,10 @@
+.git
+target/
+project/target/
+project/project/
+.bloop/
+.bsp/
+.metals/
+.vscode/
+.env
+.env.local

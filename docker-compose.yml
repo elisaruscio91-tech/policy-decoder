@@ -23,13 +23,18 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
       OLLAMA_API_KEY: ${OLLAMA_API_KEY}
       OLLAMA_MODEL: ${OLLAMA_MODEL}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
       DEFAULT_MONTHLY_QUOTA: ${DEFAULT_MONTHLY_QUOTA:-5}
     depends_on:
       db:
         condition: service_healthy
 
   db:
-    image: postgres:16-alpine
+    # pgvector/pgvector: immagine Postgres con l'estensione `vector`
+    # preinstallata, richiesta da db/migration/V2__fonti_pgvector.sql
+    # (archivio fonti RAG). Se in Coolify si usa un servizio Postgres gestito
+    # separatamente, va ricreato con questa stessa immagine.
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

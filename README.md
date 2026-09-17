@@ -17,6 +17,7 @@ valore dello strumento è nell'analisi, non nell'interfaccia.
 - [File per file](#file-per-file)
 - [Sviluppo locale](#sviluppo-locale)
 - [CLI di amministrazione](#cli-di-amministrazione)
+- [Archivio fonti (RAG)](#archivio-fonti-rag)
 - [Deploy (Hetzner + Coolify)](#deploy-hetzner--coolify)
 - [Sostenibilità dei costi](#sostenibilità-dei-costi)
 - [Trade-off consapevoli](#trade-off-consapevoli)
@@ -111,6 +112,30 @@ registrazione self-service: lo strumento è ad accesso riservato.
   parentesi rimaste aperte.
 - **`quota/Quota.scala`** — quota mensile per utente; `limiteMensile = -1`
   in whitelist significa "illimitato" (account staff/admin).
+- **`fonti/Embeddings.scala`** — chiama l'endpoint OpenAI-compatible
+  `/v1/embeddings` esposto da Ollama (o da un gateway self-hosted davanti a
+  Ollama, es. OmniRoute) per trasformare testo in vettore. Usa sempre
+  `OllamaCfg` (`OLLAMA_BASE_URL`), indipendentemente da `AI_PROVIDER`: le
+  fonti private restano sempre sull'infrastruttura self-hosted anche se
+  l'analisi vera e propria usa un provider esterno.
+- **`fonti/FontiRepo.scala`** — accesso JDBC diretto (non Quill, che non
+  supporta il tipo colonna `vector` né l'operatore di distanza `<->`) alle
+  tabelle `fonte_documento`/`fonte_chunk`: inserimento documenti/chunk,
+  ricerca per similarità (cosine distance, pgvector).
+- **`fonti/Fonti.scala`** — `contestoPer(testo)`: recupero RAG chiamato da
+  `EndpointsImpl` prima di ogni analisi. Funzionalità opt-in — se gli
+  embeddings falliscono o non ci sono chunk pertinenti, ritorna stringa
+  vuota e l'analisi prosegue normalmente senza RAG.
+- **`cli/IngestaFonte.scala`** — importa un documento (PDF o testo semplice)
+  nell'archivio fonti: estrazione testo (PDFBox per i PDF), chunking a
+  dimensione fissa (1500 caratteri, overlap 200), embedding e indicizzazione
+  di ogni chunk. Uso: vedi [Archivio fonti (RAG)](#archivio-fonti-rag).
+- **`db/migration/V2__fonti_pgvector.sql`** — abilita l'estensione
+  `vector` e crea le tabelle `fonte_documento`/`fonte_chunk` con indice HNSW
+  (cosine distance). `vector(768)` è dimensionato per `nomic-embed-text`
+  (default `EMBEDDING_MODEL`): un modello con dimensione diversa richiede di
+  adattare questa colonna PRIMA del primo avvio (Flyway non permette di
+  rieseguire una migration già applicata).
 - **`articolo/EstraiArticolo.scala`** — recupero e pulizia (Readability4J)
   di un articolo da URL. Protezioni anti-SSRF: solo `http`/`https`, blocco di
   `localhost` e di IP privati/loopback/link-local (verificati anche dopo
@@ -200,6 +225,33 @@ sbt "backend/runMain decoder.backend.cli.InvitaUtente admin@esempio.it password1
 sbt "backend/runMain decoder.backend.cli.Abilita2fa utente@esempio.it"
 ```
 
+## Archivio fonti (RAG)
+
+Archivio di documenti di riferimento (leggi, report, fonti primarie) caricati
+manualmente da un admin, self-hosted su Postgres/pgvector, usato dal motore
+di analisi come contesto aggiuntivo (RAG — Retrieval-Augmented Generation).
+Pensato per non dipendere dalla ricerca live sul web per le fonti citate: i
+documenti restano indicizzati sul proprio server, al riparo da rimozioni o
+censura altrove.
+
+**Requisiti**: `OLLAMA_BASE_URL` configurato (Ollama self-hosted, o un
+gateway compatibile OpenAI come [OmniRoute](https://github.com/diegosouzapw/OmniRoute)
+davanti a Ollama) — gli embeddings per il RAG passano sempre di lì,
+indipendentemente da quale `AI_PROVIDER` è scelto per l'analisi vera e
+propria. Postgres deve avere l'estensione `pgvector` disponibile (vedi nota
+Coolify più sotto).
+
+```bash
+# Carica un documento (PDF o .txt) nell'archivio fonti
+sbt "backend/runMain decoder.backend.cli.IngestaFonte /percorso/documento.pdf 'Titolo del documento'"
+```
+
+Ad ogni analisi, `Fonti.contestoPer` cerca (cosine similarity) i chunk più
+pertinenti al testo analizzato e li inietta nel prompt come contesto
+citabile. Se `OLLAMA_BASE_URL` non è configurato, o l'archivio è vuoto, o gli
+embeddings falliscono, l'analisi prosegue comunque senza RAG (mai un
+requisito bloccante).
+
 ## Deploy (Hetzner + Coolify)
 
 Coolify (self-hosted, open-source) su una VPS Hetzner. Due opzioni:
@@ -216,6 +268,17 @@ Coolify (self-hosted, open-source) su una VPS Hetzner. Due opzioni:
 In entrambi i casi, dopo il primo deploy creare almeno un account admin con
 `InvitaUtente` (via shell del container, o sbt in locale puntato al
 Postgres di produzione).
+
+> **Importante per il RAG**: la migration `V2__fonti_pgvector.sql` richiede
+> l'estensione Postgres `vector` (pgvector). Il servizio Postgres "template
+> Coolify" standard non la include. Con l'opzione 1, va creato un servizio
+> Postgres custom in Coolify basato sull'immagine `pgvector/pgvector:pg16`
+> (stesso comportamento di un Postgres normale, estensione già installata)
+> invece del template Postgres di default. Con l'opzione 2 non serve fare
+> nulla: `docker-compose.yml` usa già `pgvector/pgvector:pg16`. Se questa
+> migration viene eseguita contro un Postgres senza pgvector, fallisce
+> all'avvio (`CREATE EXTENSION vector` va in errore) e va risolto prima che
+> l'app possa ripartire.
 
 ## Sostenibilità dei costi
 

@@ -3,6 +3,7 @@ package decoder.backend
 import decoder.backend.api.EndpointsImpl
 import decoder.backend.config.AppConfig
 import decoder.backend.db.{Db, Repo}
+import decoder.backend.fonti.FontiRepo
 import decoder.backend.http.HttpClient
 import sttp.tapir.server.ziohttp.ZioHttpInterpreter
 import zio.*
@@ -45,6 +46,7 @@ object Main extends ZIOAppDefault:
       Db.dataSourceLayer,
       Db.quillLayer,
       Repo.layer,
+      FontiRepo.layer,
       HttpClient.layer,
       Server.defaultWithPort(porta),
     )

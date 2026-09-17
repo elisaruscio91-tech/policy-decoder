@@ -57,6 +57,7 @@ lazy val backend = (project in file("modules/backend"))
       "net.dankito.readability4j" % "readability4j" % "1.0.8",
       "com.google.zxing" % "core"    % "3.5.3",
       "com.google.zxing" % "javase"  % "3.5.3",
+      "org.apache.pdfbox" % "pdfbox" % "3.0.3",
       "ch.qos.logback" % "logback-classic" % "1.5.12",
       "dev.zio" %% "zio-test"     % zioVersion % Test,
       "dev.zio" %% "zio-test-sbt" % zioVersion % Test,

@@ -3,6 +3,7 @@ package decoder.backend.api
 import decoder.backend.articolo.EstraiArticolo
 import decoder.backend.config.AppConfig
 import decoder.backend.db.{AnalisiRichiesta, Repo}
+import decoder.backend.fonti.{Fonti, FontiRepo}
 import decoder.backend.http.HttpClient
 import decoder.backend.ia.{MotoreIA, PromptSistema}
 import decoder.backend.quota.Quota
@@ -26,7 +27,7 @@ import java.util.UUID
 // endpoint con requisiti diversi in un'unica lista.
 object EndpointsImpl:
 
-  type Env = Repo & AppConfig & HttpClient.Backend
+  type Env = Repo & AppConfig & HttpClient.Backend & FontiRepo
 
   private val ENDPOINT_ANALYZE = "/api/analyze"
   private val ENDPOINT_FETCH   = "/api/fetch-url"
@@ -126,8 +127,9 @@ object EndpointsImpl:
         inizio  = Instant.now()
         risultato <- (
           for
-            raw    <- MotoreIA.chiamaModello(cfg.ai, PromptSistema.build(outputLang), s"Analyze this text:\n\n---\n$testo\n---")
-            parsed <- MotoreIA.estraiJson[RisultatoAnalisi](raw)
+            contesto <- Fonti.contestoPer(testo).catchAll(_ => ZIO.succeed(""))
+            raw      <- MotoreIA.chiamaModello(cfg.ai, PromptSistema.build(outputLang), s"Analyze this text:\n\n---\n$testo\n---$contesto")
+            parsed   <- MotoreIA.estraiJson[RisultatoAnalisi](raw)
           yield parsed
         ).foldZIO(
           errore =>

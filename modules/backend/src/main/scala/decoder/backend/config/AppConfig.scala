@@ -15,6 +15,7 @@ final case class AppConfig(
   databaseUrl: String,
   ai: AiCfg,
   defaultMonthlyQuota: Int,
+  embeddingModel: String,
 )
 
 object AppConfig:
@@ -46,6 +47,7 @@ object AppConfig:
         ),
       ),
       defaultMonthlyQuota = c.getInt("quota.default-monthly"),
+      embeddingModel = c.getString("embedding.model"),
     )
   }
 

@@ -69,10 +69,15 @@ lazy val backend = (project in file("modules/backend"))
     // fallisce per un duplicato non coperto qui, è il primo posto da guardare.
     assembly / mainClass := Some("decoder.backend.Main"),
     assembly / assemblyMergeStrategy := {
-      case PathList("META-INF", _*) => MergeStrategy.discard
-      case "module-info.class"      => MergeStrategy.discard
-      case "reference.conf"         => MergeStrategy.concat
-      case _                        => MergeStrategy.first
+      // META-INF/services/* va concatenato (non scartato): è il meccanismo
+      // ServiceLoader con cui Flyway scopre il plugin flyway-database-postgresql
+      // a runtime — scartarlo causa "Unsupported Database" indipendentemente
+      // dalla versione di Postgres in uso.
+      case PathList("META-INF", "services", _*) => MergeStrategy.concat
+      case PathList("META-INF", _*)             => MergeStrategy.discard
+      case "module-info.class"                  => MergeStrategy.discard
+      case "reference.conf"                     => MergeStrategy.concat
+      case _                                     => MergeStrategy.first
     },
   )
 

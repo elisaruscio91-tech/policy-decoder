@@ -33,13 +33,19 @@ object Main extends ZIOAppDefault:
   private val staticRoutes: Routes[Any, Response] =
     Routes(Method.GET / trailing -> staticHandler)
 
+  // Endpoint di healthcheck: usato da Docker/Coolify per verificare che il
+  // processo risponda davvero (non solo che sia partito) — vedi HEALTHCHECK
+  // nel Dockerfile.
+  private val healthRoutes: Routes[Any, Response] =
+    Routes(Method.GET / "api" / "health" -> Handler.ok)
+
   private val porta: Int = sys.env.get("PORT").flatMap(_.toIntOption).getOrElse(8080)
 
   private val program =
     for
       _        <- Db.migrate
       apiRoutes = ZioHttpInterpreter().toHttp(EndpointsImpl.all)
-      _        <- Server.serve(apiRoutes ++ staticRoutes)
+      _        <- Server.serve(healthRoutes ++ apiRoutes ++ staticRoutes)
     yield ()
 
   override def run =

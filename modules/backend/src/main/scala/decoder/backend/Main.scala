@@ -21,12 +21,14 @@ import zio.http.*
 // primo in caso di errori di build.
 object Main extends ZIOAppDefault:
 
-  private val staticHandler: Handler[Any, Throwable, (Path, Request), Response] =
-    Handler.fromFunctionHandler[(Path, Request)] { case (path, _) =>
-      val richiesto = path.encode.stripPrefix("/")
-      val risorsa   = if richiesto.isEmpty then "static/index.html" else s"static/$richiesto"
-      Handler.fromResource(risorsa)
-    }
+  private val staticHandler: Handler[Any, Nothing, (Path, Request), Response] =
+    Handler
+      .fromFunctionHandler[(Path, Request)] { case (path, _) =>
+        val richiesto = path.encode.stripPrefix("/")
+        val risorsa   = if richiesto.isEmpty then "static/index.html" else s"static/$richiesto"
+        Handler.fromResource(risorsa)
+      }
+      .orDie
 
   private val staticRoutes: Routes[Any, Response] =
     Routes(Method.GET / trailing -> staticHandler)

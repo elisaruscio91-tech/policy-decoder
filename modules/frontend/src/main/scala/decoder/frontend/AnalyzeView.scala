@@ -148,7 +148,7 @@ object AnalyzeView:
     div(
       cls := "app",
       onMountCallback(_ => aggiornaQuota(token)),
-      header(
+      div(
         cls := "intestazione",
         span(child.text <-- emailSignal.map(_.getOrElse(""))),
         span(

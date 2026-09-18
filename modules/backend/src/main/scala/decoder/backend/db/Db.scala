@@ -35,7 +35,7 @@ object Db:
   val dataSourceLayer: ZLayer[AppConfig, Throwable, DataSource] =
     ZLayer.fromZIO(ZIO.serviceWithZIO[AppConfig](cfg => buildDataSource(cfg.databaseUrl)))
 
-  /** Esegue le migrazioni Flyway (risorse in db/migration/*.sql) prima che il
+  /** Esegue le migrazioni Flyway (risorse .sql in db/migration) prima che il
     * server accetti richieste — nessun passaggio manuale da ricordarsi.
     */
   val migrate: RIO[DataSource, Unit] =

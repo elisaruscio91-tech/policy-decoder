@@ -5,7 +5,7 @@ import decoder.shared.Articolo
 import net.dankito.readability4j.Readability4J
 import sttp.client3.*
 import sttp.model.Uri
-import zio.*
+import zio.{RIO, Task, ZIO}
 
 import java.net.{InetAddress, URI as JUri}
 import scala.concurrent.duration.*

@@ -11,4 +11,4 @@ object HttpClient:
   type Backend = SttpBackend[Task, Any]
 
   val layer: ZLayer[Any, Throwable, Backend] =
-    ZLayer.scoped(AsyncHttpClientZioBackend.scoped())
+    ZLayer.scoped(AsyncHttpClientZioBackend.scoped().map(backend => backend: Backend))

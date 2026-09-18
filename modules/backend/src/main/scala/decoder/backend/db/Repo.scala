@@ -1,6 +1,7 @@
 package decoder.backend.db
 
 import io.getquill.*
+import io.getquill.extras.InstantOps
 import zio.*
 
 import java.time.Instant

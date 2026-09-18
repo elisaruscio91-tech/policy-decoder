@@ -11,7 +11,6 @@ final case class AiCfg(provider: String, anthropic: AnthropicCfg, openrouter: Op
 final case class AppConfig(
   port: Int,
   jwtSecret: String,
-  cookieSecure: Boolean,
   databaseUrl: String,
   ai: AiCfg,
   defaultMonthlyQuota: Int,

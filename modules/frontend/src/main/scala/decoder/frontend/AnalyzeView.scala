@@ -239,7 +239,7 @@ object AnalyzeView:
     div(
       cls := "app",
       onMountCallback(_ => aggiornaQuota(token)),
-      header(
+      div(
         cls := "intestazione",
         div(
           cls := "marchio",
@@ -264,7 +264,7 @@ object AnalyzeView:
           button(cls := "btn-esci", onClick --> (_ => logout()), "Esci"),
         ),
       ),
-      main(
+      div(
         cls := "contenuto",
         div(
           cls := "tabs",

@@ -166,6 +166,7 @@ object EndpointsImpl:
           errore =>
             val durataMs = java.time.Duration.between(inizio, Instant.now()).toMillis.toInt
             val msg      = Option(errore.getMessage).getOrElse("Analisi fallita")
+            ZIO.logWarning(s"analyze fallito: $msg") *>
             ZIO.serviceWithZIO[Repo](
               _.registraAnalisi(
                 AnalisiRichiesta(

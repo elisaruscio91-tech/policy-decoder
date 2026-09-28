@@ -33,6 +33,10 @@ object LoginView:
 
     div(
       cls := "login",
+      div(
+        cls := "marchio",
+        img(src := "./acet-logo.svg", cls := "logo-acet", alt := "ACET"),
+      ),
       h1("Policy Decoder"),
       form(
         onSubmit.preventDefault --> (_ => submit()),

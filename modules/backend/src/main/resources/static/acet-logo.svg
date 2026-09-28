@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="ACET - Associazione per la Cultura e l'Etica Transgenere">
+  <defs>
+    <linearGradient id="acetGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5BCEFA" />
+      <stop offset="50%" stop-color="#F5A9B8" />
+      <stop offset="100%" stop-color="#5BCEFA" />
+    </linearGradient>
+    <path id="acetCirclePath" d="M100,100 m-82,0 a82,82 0 1,1 164,0 a82,82 0 1,1 -164,0" />
+  </defs>
+
+  <circle cx="100" cy="100" r="98" fill="url(#acetGrad)" />
+
+  <text font-family="'DM Sans', system-ui, sans-serif" font-size="9.5" font-weight="700" letter-spacing="2.2" fill="#ffffff">
+    <textPath href="#acetCirclePath" startOffset="50%" text-anchor="middle">
+      ASSOCIAZIONE PER LA CULTURA E L'ETICA TRANSGENERE
+    </textPath>
+  </text>
+
+  <g transform="translate(100,104)">
+    <path d="M0,-30 L9,-16 L2,-16 L2,-2 L-2,-2 L-2,-16 L-9,-16 Z" fill="#ffffff" />
+    <text x="0" y="26" text-anchor="middle" font-family="'DM Sans', system-ui, sans-serif" font-size="34" font-weight="800" fill="#ffffff">acet</text>
+  </g>
+</svg>

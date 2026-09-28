@@ -7,10 +7,9 @@ import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success}
 
-// Vista principale "minimo minimo": tab testo/url, selettore lingua di
-// output, invio analisi, rendering delle 7 sezioni del risultato. Nessuna
-// pretesa di replicare pixel-per-pixel il vecchio PolicyDecoder.tsx (645
-// righe di React): stessa logica, presentazione essenziale.
+// Vista principale: tab testo/url, selettore lingua di output, invio
+// analisi, rendering delle 7 sezioni del risultato. Estetica ripresa dalla
+// vecchia versione React (tema scuro, accento viola ACET) — vedi style.css.
 object AnalyzeView:
 
   private val MAX_CARATTERI = 20_000
@@ -25,6 +24,27 @@ object AnalyzeView:
   private def messaggioSicuro(raw: String): String =
     val pulito = Option(raw).getOrElse("")
     if pulito.isEmpty || pulito.length > 300 || pulito.contains("<") then MSG_ERRORE_GENERICO else pulito
+
+  // Palette di colori per punteggio di rischio / gravità / verdetto,
+  // ripresa 1:1 dalla vecchia versione React.
+  private def coloreRischio(score: Int): String =
+    if score >= 80 then "#dc2626"
+    else if score >= 60 then "#ea580c"
+    else if score >= 40 then "#d97706"
+    else if score >= 20 then "#2563eb"
+    else "#16a34a"
+
+  private def coloreGravita(sev: Int): String =
+    if sev >= 8 then "#dc2626" else if sev >= 5 then "#d97706" else "#2563eb"
+
+  private def coloreVerdetto(verdetto: String): String =
+    val v = verdetto.toLowerCase
+    if v.contains("false") || v.contains("falso") then "#dc2626"
+    else if v.contains("misleading") || v.contains("fuorviante") then "#ea580c"
+    else if v.contains("partially") || v.contains("parzialmente") then "#d97706"
+    else if v.contains("unverifiable") || v.contains("non verificabile") then "#9333ea"
+    else if v == "true" || v == "vero" then "#16a34a"
+    else "#64748b"
 
   def render(
     token: String,
@@ -91,29 +111,70 @@ object AnalyzeView:
         r.summary.map(s =>
           sezione(
             "Sintesi",
-            p(s.text.getOrElse("")),
-            p(b("Intento dichiarato: "), s.declared_intent.getOrElse("")),
-            p(b("Intento reale: "), s.actual_intent.getOrElse("")),
+            div(
+              cls := "card",
+              p(s.text.getOrElse("")),
+              div(
+                cls := "riquadri-intento",
+                div(
+                  cls := "riquadro-intento",
+                  div(cls := "etichetta", "Intento dichiarato"),
+                  p(s.declared_intent.getOrElse("")),
+                ),
+                div(
+                  cls := "riquadro-intento reale",
+                  div(cls := "etichetta", "Intento reale"),
+                  p(s.actual_intent.getOrElse("")),
+                ),
+              ),
+            ),
           ),
         ),
-        r.danger_score.map(ds =>
+        r.danger_score.map { ds =>
+          val score   = ds.score.getOrElse(0)
+          val colore  = coloreRischio(score)
+          val stileAnello =
+            s"--percentuale: $score; --colore-rischio: $colore;"
           sezione(
             "Livello di rischio",
-            p(b(s"${ds.score.getOrElse(0)}/100 — ${ds.label.getOrElse("")}")),
-            p(ds.explanation.getOrElse("")),
-          ),
-        ),
+            div(
+              cls := "rischio-card",
+              div(
+                cls := "anello-rischio",
+                styleAttr := stileAnello,
+                div(
+                  cls := "anello-rischio-valore",
+                  span(cls := "numero", styleAttr := s"color: $colore", score.toString),
+                  span(cls := "su-cento", "/100"),
+                ),
+              ),
+              span(cls := "rischio-etichetta", styleAttr := s"color: $colore", ds.label.getOrElse("")),
+              p(ds.explanation.getOrElse("")),
+            ),
+          )
+        },
         r.rhetoric.filter(_.nonEmpty).map(items =>
           sezione(
             "Tecniche retoriche",
             ul(
-              items.map(it =>
+              items.map { it =>
+                val sev    = it.severity.getOrElse(0)
+                val colore = coloreGravita(sev)
                 li(
-                  p(b(s"${it.framework.getOrElse("")} — ${it.technique.getOrElse("")} (gravità ${it.severity.getOrElse(0)}/10)")),
+                  cls := "retorica-item",
+                  styleAttr := s"--colore-gravita: $colore",
+                  div(cls := "retorica-framework", it.framework.getOrElse("")),
+                  h3(it.technique.getOrElse("")),
                   p(cls := "quote", "\u00ab" + it.quote.getOrElse("") + "\u00bb"),
                   p(it.analysis.getOrElse("")),
-                ),
-              ),
+                  div(
+                    cls := "barra-gravita",
+                    span(cls := "etichetta", "Gravità"),
+                    div(cls := "traccia", div(cls := "riempimento", styleAttr := s"--gravita: $sev; --colore-gravita: $colore")),
+                    span(cls := "valore", styleAttr := s"color: $colore", s"$sev/10"),
+                  ),
+                )
+              },
             ),
           ),
         ),
@@ -121,21 +182,25 @@ object AnalyzeView:
           sezione(
             "Fact-check",
             ul(
-              items.map(it =>
+              items.map { it =>
+                val verdetto = it.verdict.getOrElse("")
+                val colore   = coloreVerdetto(verdetto)
                 li(
-                  p(b(s"${it.verdict.getOrElse("")}: "), it.claim.getOrElse("")),
+                  cls := "factcheck-item",
+                  span(cls := "verdetto", styleAttr := s"--colore-verdetto: $colore", verdetto),
+                  h3("\u00ab" + it.claim.getOrElse("") + "\u00bb"),
                   p(it.evidence.getOrElse("")),
                   p(cls := "fonte", it.source.getOrElse("")),
                   p(it.verdict_explain.getOrElse("")),
-                ),
-              ),
+                )
+              },
             ),
           ),
         ),
         r.legal.filter(_.nonEmpty).map(items =>
           sezione(
             "Quadro giuridico",
-            ul(items.map(it => li(p(b(it.heading.getOrElse(""))), p(it.text.getOrElse(""))))),
+            ul(items.map(it => li(cls := "legale-item", h3(it.heading.getOrElse("")), p(it.text.getOrElse(""))))),
           ),
         ),
         r.counter_narrative.filter(_.nonEmpty).map(items =>
@@ -143,7 +208,12 @@ object AnalyzeView:
             "Contro-narrazione",
             ul(
               items.map(it =>
-                li(p(b(it.title.getOrElse(""))), p(it.text.getOrElse("")), p(cls := "fonte", it.source.getOrElse(""))),
+                li(
+                  cls := "contronarrazione-item",
+                  h3(it.title.getOrElse("")),
+                  p(it.text.getOrElse("")),
+                  p(cls := "fonte", it.source.getOrElse("")),
+                ),
               ),
             ),
           ),
@@ -153,7 +223,14 @@ object AnalyzeView:
             "Slide social",
             div(
               cls := "slides",
-              items.map(it => div(cls := "slide", p(it.emoji.getOrElse("")), h3(it.title.getOrElse("")), p(it.body.getOrElse("")))),
+              items.map(it =>
+                div(
+                  cls := "slide",
+                  span(cls := "emoji", it.emoji.getOrElse("")),
+                  h3(it.title.getOrElse("")),
+                  p(it.body.getOrElse("")),
+                ),
+              ),
             ),
           ),
         ),
@@ -162,61 +239,78 @@ object AnalyzeView:
     div(
       cls := "app",
       onMountCallback(_ => aggiornaQuota(token)),
-      div(
+      header(
         cls := "intestazione",
-        span(child.text <-- emailSignal.map(_.getOrElse(""))),
-        span(
-          child.text <-- quotaVar.signal.map {
-            case Some(q) if q.limite < 0 => "Quota: illimitata"
-            case Some(q)                 => s"Quota: ${q.usate}/${q.limite} (rimanenti ${q.rimanenti})"
-            case None                    => ""
+        div(
+          cls := "marchio",
+          img(src := "./acet-logo.svg", cls := "logo-acet", alt := "ACET"),
+          div(
+            cls := "nome-app",
+            strong("Policy Decoder"),
+            span("by ACET"),
+          ),
+        ),
+        div(
+          cls := "stato-utente",
+          span(cls := "email-utente", child.text <-- emailSignal.map(_.getOrElse(""))),
+          span(
+            cls := "quota-chip",
+            child.text <-- quotaVar.signal.map {
+              case Some(q) if q.limite < 0 => "Quota: illimitata"
+              case Some(q)                 => s"Quota: ${q.usate}/${q.limite} (rimanenti ${q.rimanenti})"
+              case None                    => ""
+            },
+          ),
+          button(cls := "btn-esci", onClick --> (_ => logout()), "Esci"),
+        ),
+      ),
+      main(
+        cls := "contenuto",
+        div(
+          cls := "tabs",
+          button(
+            cls.toggle("attivo") <-- modeVar.signal.map(_ == "testo"),
+            onClick --> (_ => modeVar.set("testo")),
+            "Testo",
+          ),
+          button(
+            cls.toggle("attivo") <-- modeVar.signal.map(_ == "url"),
+            onClick --> (_ => modeVar.set("url")),
+            "URL",
+          ),
+        ),
+        div(
+          child <-- modeVar.signal.map {
+            case "url" =>
+              input(
+                typ := "url",
+                placeholder := "https://...",
+                onInput.mapToValue --> urlVar.writer,
+                value <-- urlVar.signal,
+              ): HtmlElement
+            case _ =>
+              textArea(
+                rows := 12,
+                maxLength := MAX_CARATTERI,
+                placeholder := "Incolla qui il testo da analizzare...",
+                onInput.mapToValue --> testoVar.writer,
+                value <-- testoVar.signal,
+              ): HtmlElement
           },
         ),
-        button(onClick --> (_ => logout()), "Esci"),
-      ),
-      div(
-        cls := "tabs",
-        button(
-          cls.toggle("attivo") <-- modeVar.signal.map(_ == "testo"),
-          onClick --> (_ => modeVar.set("testo")),
-          "Testo",
+        div(
+          cls := "controlli",
+          label("Lingua output: "),
+          select(
+            onChange.mapToValue --> linguaVar.writer,
+            option(value := "auto", "Automatica"),
+            option(value := "it", "Italiano"),
+            option(value := "en", "English"),
+          ),
+          button(disabled <-- inCorsoVar.signal, onClick --> (_ => submit()), "Analizza"),
         ),
-        button(
-          cls.toggle("attivo") <-- modeVar.signal.map(_ == "url"),
-          onClick --> (_ => modeVar.set("url")),
-          "URL",
-        ),
+        child.maybe <-- inCorsoVar.signal.map(Option.when(_)(p(cls := "in-corso", "Analisi in corso..."))),
+        child.maybe <-- erroreVar.signal.map(_.map(msg => p(cls := "errore", msg))),
+        child.maybe <-- risultatoVar.signal.map(_.map(renderRisultato)),
       ),
-      div(
-        child <-- modeVar.signal.map {
-          case "url" =>
-            input(
-              typ := "url",
-              placeholder := "https://...",
-              onInput.mapToValue --> urlVar.writer,
-              value <-- urlVar.signal,
-            ): HtmlElement
-          case _ =>
-            textArea(
-              rows := 12,
-              maxLength := MAX_CARATTERI,
-              placeholder := "Incolla qui il testo da analizzare...",
-              onInput.mapToValue --> testoVar.writer,
-              value <-- testoVar.signal,
-            ): HtmlElement
-        },
-      ),
-      div(
-        label("Lingua output: "),
-        select(
-          onChange.mapToValue --> linguaVar.writer,
-          option(value := "auto", "Automatica"),
-          option(value := "it", "Italiano"),
-          option(value := "en", "English"),
-        ),
-      ),
-      button(disabled <-- inCorsoVar.signal, onClick --> (_ => submit()), "Analizza"),
-      child.maybe <-- inCorsoVar.signal.map(Option.when(_)(p(cls := "in-corso", "Analisi in corso..."))),
-      child.maybe <-- erroreVar.signal.map(_.map(msg => p(cls := "errore", msg))),
-      child.maybe <-- risultatoVar.signal.map(_.map(renderRisultato)),
     )

@@ -15,6 +15,9 @@ metals.sbt
 .env.local
 !.env.example
 
+# PDF/testi sorgente da caricare via IngestaFonte: locali, non vanno nel repo.
+fonti-da-caricare/
+
 # JS compilato dal frontend ScalaJS, copiato qui in build (vedi Dockerfile).
 # Nessun file .js scritto a mano vive in static/, quindi ignoriamo tutti quelli
 # generati (main.js più gli eventuali moduli splittati) senza dover indovinare

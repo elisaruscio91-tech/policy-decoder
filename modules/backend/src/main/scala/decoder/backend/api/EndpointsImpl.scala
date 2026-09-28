@@ -35,7 +35,26 @@ object EndpointsImpl:
   private val LIMITE_FETCH     = 20
   private val FINESTRA_MINUTI  = 10
   private val MAX_CARATTERI_INPUT = 20_000
+  // Limite più permissivo per gli articoli estratti da URL: a differenza del
+  // testo incollato a mano, qui la lunghezza dipende dal sito (articoli
+  // lunghi, o contenuti extra come box "correlati" annidati nello stesso
+  // tag <article> che Readability4J non riesce sempre a isolare) e l'utente
+  // non ha modo di accorciarla lui stesso.
+  private val MAX_CARATTERI_URL = 60_000
   private val LINGUE_VALIDE = Set("auto", "en", "it")
+  private val EMAIL_ASSISTENZA = "elisa.ruscio@proton.me"
+  private val MSG_ERRORE_GENERICO =
+    s"Analisi non riuscita per un problema temporaneo del servizio. Riprova tra qualche minuto; " +
+      s"se il problema persiste scrivi a $EMAIL_ASSISTENZA."
+
+  // Qualunque messaggio non sembri un testo applicativo breve (es. una pagina
+  // HTML di errore restituita da un proxy/CDN davanti al server, o un
+  // messaggio di libreria non pensato per essere letto da un utente) viene
+  // sostituito da un messaggio generico — il dettaglio resta comunque nel log
+  // su DB (registraAnalisi/erroreMessaggio) per la diagnosi.
+  private def messaggioPubblico(msg: String): String =
+    val pulito = Option(msg).getOrElse("")
+    if pulito.isEmpty || pulito.length > 300 || pulito.contains("<") then MSG_ERRORE_GENERICO else pulito
 
   private case object RateLimitedException extends RuntimeException("Troppe richieste. Riprova tra qualche minuto.")
   private case object CredenzialiNonValideException extends RuntimeException("Credenziali non valide")
@@ -54,10 +73,10 @@ object EndpointsImpl:
     case UrlMancanteException          => (StatusCode.BadRequest, ErroreApi(e.getMessage))
     case TestoTroppoLungoException(_)  => (StatusCode.PayloadTooLarge, ErroreApi(e.getMessage))
     case QuotaEsauritaException(quota) => (StatusCode.TooManyRequests, ErroreApi(e.getMessage, Some(quota)))
-    case AnalisiFallitaException(msg)  => (StatusCode.BadGateway, ErroreApi(msg))
+    case AnalisiFallitaException(msg)  => (StatusCode.BadGateway, ErroreApi(messaggioPubblico(msg)))
     case err: EstraiArticolo.ErroreArticolo =>
-      (StatusCode.UnprocessableEntity, ErroreApi(Option(err.getMessage).getOrElse("Impossibile recuperare l'articolo")))
-    case _ => (StatusCode.InternalServerError, ErroreApi(Option(e.getMessage).getOrElse("Errore interno")))
+      (StatusCode.UnprocessableEntity, ErroreApi(Option(err.getMessage).map(messaggioPubblico).getOrElse("Impossibile recuperare l'articolo")))
+    case _ => (StatusCode.InternalServerError, ErroreApi(messaggioPubblico(Option(e.getMessage).getOrElse(""))))
 
   private def securityLogic(token: String): ZIO[Env, (StatusCode, ErroreApi), Auth.Utente] =
     for
@@ -91,12 +110,15 @@ object EndpointsImpl:
     val (req, ip) = input
     val modalita   = if req.modalita == "url" then "url" else "testo"
     val outputLang = if LINGUE_VALIDE.contains(req.outputLang) then req.outputLang else "auto"
-    // Gli articoli estratti da URL vengono troncati invece che rifiutati: la
-    // lunghezza dipende dal sito (spesso include contenuti oltre al solo
-    // articolo, es. box "correlati" annidati) e non è colpa/controllo
-    // dell'utente come lo è per il testo incollato a mano.
+    // Gli articoli estratti da URL vengono troncati (a fine parola, non a
+    // metà) invece che rifiutati — vedi commento su MAX_CARATTERI_URL.
     val testoGrezzo = req.testo.trim
-    val testo       = if modalita == "url" then testoGrezzo.take(MAX_CARATTERI_INPUT) else testoGrezzo
+    val testo =
+      if modalita != "url" || testoGrezzo.length <= MAX_CARATTERI_URL then testoGrezzo
+      else
+        val tagliato = testoGrezzo.take(MAX_CARATTERI_URL)
+        val fineParola = tagliato.lastIndexWhere(_.isWhitespace)
+        if fineParola > 0 then tagliato.substring(0, fineParola) else tagliato
 
     val effetto: RIO[Env, AnalyzeResponse] =
       for

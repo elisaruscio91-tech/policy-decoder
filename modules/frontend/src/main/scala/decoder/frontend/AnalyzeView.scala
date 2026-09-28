@@ -14,6 +14,17 @@ import scala.util.{Failure, Success}
 object AnalyzeView:
 
   private val MAX_CARATTERI = 20_000
+  private val EMAIL_ASSISTENZA = "elisa.ruscio@proton.me"
+  private val MSG_ERRORE_GENERICO =
+    s"Si è verificato un errore imprevisto. Riprova tra qualche minuto; se il problema persiste scrivi a $EMAIL_ASSISTENZA."
+
+  // Difesa in profondità: anche se il backend è già stato sistemato per non
+  // restituire mai messaggi grezzi, un proxy/CDN davanti al server (es.
+  // Cloudflare) può restituire le sue pagine di errore HTML prima ancora che
+  // la richiesta arrivi al backend — non vanno mai mostrate così come sono.
+  private def messaggioSicuro(raw: String): String =
+    val pulito = Option(raw).getOrElse("")
+    if pulito.isEmpty || pulito.length > 300 || pulito.contains("<") then MSG_ERRORE_GENERICO else pulito
 
   def render(
     token: String,
@@ -62,10 +73,13 @@ object AnalyzeView:
             risultatoVar.set(Some(ris))
           case Success(Left(msg)) =>
             inCorsoVar.set(false)
-            erroreVar.set(Some(msg))
-          case Failure(e) =>
+            erroreVar.set(Some(messaggioSicuro(msg)))
+          case Failure(_) =>
+            // Errori di rete/decodifica (es. il server non ha risposto affatto,
+            // o un proxy davanti ad esso ha restituito una sua pagina di
+            // errore): nessun dettaglio tecnico è utile all'utente qui.
             inCorsoVar.set(false)
-            erroreVar.set(Some(e.getMessage))
+            erroreVar.set(Some(MSG_ERRORE_GENERICO))
         }
 
     def sezione(titolo: String, contenuto: Modifier[HtmlElement]*): HtmlElement =

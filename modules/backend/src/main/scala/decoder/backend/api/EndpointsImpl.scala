@@ -89,9 +89,14 @@ object EndpointsImpl:
 
   private def analyzeLogic(utente: Auth.Utente)(input: (AnalyzeRequest, String)): ZIO[Env, (StatusCode, ErroreApi), AnalyzeResponse] =
     val (req, ip) = input
-    val testo      = req.testo.trim
     val modalita   = if req.modalita == "url" then "url" else "testo"
     val outputLang = if LINGUE_VALIDE.contains(req.outputLang) then req.outputLang else "auto"
+    // Gli articoli estratti da URL vengono troncati invece che rifiutati: la
+    // lunghezza dipende dal sito (spesso include contenuti oltre al solo
+    // articolo, es. box "correlati" annidati) e non è colpa/controllo
+    // dell'utente come lo è per il testo incollato a mano.
+    val testoGrezzo = req.testo.trim
+    val testo       = if modalita == "url" then testoGrezzo.take(MAX_CARATTERI_INPUT) else testoGrezzo
 
     val effetto: RIO[Env, AnalyzeResponse] =
       for

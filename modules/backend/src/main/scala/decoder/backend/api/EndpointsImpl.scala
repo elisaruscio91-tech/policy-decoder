@@ -129,7 +129,11 @@ object EndpointsImpl:
         _ <- ZIO.when(testo.isEmpty)(
           Sicurezza.registraEvento(ip, ENDPOINT_ANALYZE, "fallimento") *> ZIO.fail(TestoMancanteException),
         )
-        _ <- ZIO.when(testo.length > MAX_CARATTERI_INPUT)(
+        // Il testo da URL è già stato troncato sopra a MAX_CARATTERI_URL: qui
+        // si rifiuta solo il testo incollato a mano che superi il limite più
+        // basso (l'utente può accorciarlo lui stesso, a differenza di un
+        // articolo estratto).
+        _ <- ZIO.when(modalita != "url" && testo.length > MAX_CARATTERI_INPUT)(
           Sicurezza.registraEvento(ip, ENDPOINT_ANALYZE, "fallimento") *> ZIO.fail(TestoTroppoLungoException(MAX_CARATTERI_INPUT)),
         )
         quota <- Quota.statoQuota(utente.id, utente.email)

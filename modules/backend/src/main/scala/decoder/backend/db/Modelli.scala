@@ -25,6 +25,15 @@ final case class EventoSicurezza(
   createdAt: Instant,
 )
 
+final case class RichiestaAccesso(
+  id: String,
+  email: String,
+  passwordHash: String,
+  stato: String, // "in_attesa" | "approvata" | "rifiutata"
+  createdAt: Instant,
+  gestitaAt: Option[Instant],
+)
+
 final case class AnalisiRichiesta(
   id: String,
   userId: String,

@@ -53,6 +53,13 @@ object Api:
       .send(backend)
       .map(_.body)
 
+  def richiediAccesso(req: RichiediAccessoRequest): Future[Either[(StatusCode, ErroreApi), MessaggioOk]] =
+    interpreter
+      .toRequestThrowDecodeFailures(Endpoints.richiediAccesso, baseUri)
+      .apply((req, ""))
+      .send(backend)
+      .map(_.body)
+
   def usage(token: String): Future[Either[(StatusCode, ErroreApi), Quota]] =
     interpreter
       .toSecureRequestThrowDecodeFailures(Endpoints.usage, baseUri)

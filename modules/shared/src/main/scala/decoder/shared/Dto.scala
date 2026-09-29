@@ -105,3 +105,14 @@ object ErroreApi:
 final case class ExportPdfRequest(risultato: RisultatoAnalisi, uiLang: String, scope: String)
 object ExportPdfRequest:
   given Codec[ExportPdfRequest] = deriveCodec
+
+// Form "Registrati": l'utente sceglie email+password ma l'account resta in
+// attesa di approvazione manuale (vedi EndpointsImpl.richiediAccessoLogic e
+// decoder.backend.cli.GestisciRichieste) — niente login immediato.
+final case class RichiediAccessoRequest(email: String, password: String)
+object RichiediAccessoRequest:
+  given Codec[RichiediAccessoRequest] = deriveCodec
+
+final case class MessaggioOk(messaggio: String)
+object MessaggioOk:
+  given Codec[MessaggioOk] = deriveCodec

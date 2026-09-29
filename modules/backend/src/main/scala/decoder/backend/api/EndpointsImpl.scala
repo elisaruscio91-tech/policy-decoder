@@ -2,7 +2,8 @@ package decoder.backend.api
 
 import decoder.backend.articolo.EstraiArticolo
 import decoder.backend.config.AppConfig
-import decoder.backend.db.{AnalisiRichiesta, Repo}
+import decoder.backend.db.{AnalisiRichiesta, Repo, RichiestaAccesso}
+import decoder.backend.email.EmailService
 import decoder.backend.fonti.{Fonti, FontiRepo}
 import decoder.backend.http.HttpClient
 import decoder.backend.ia.{MotoreIA, PromptSistema}
@@ -11,9 +12,10 @@ import decoder.backend.quota.Quota
 import decoder.backend.sicurezza.{Auth, Sicurezza}
 import decoder.shared.{
   AnalyzeRequest, AnalyzeResponse, Articolo, Endpoints, ErroreApi, ExportPdfRequest,
-  FetchUrlRequest, LoginRequest, LoginResponse, RisultatoAnalisi,
+  FetchUrlRequest, LoginRequest, LoginResponse, MessaggioOk, RichiediAccessoRequest, RisultatoAnalisi,
   Quota as QuotaDto,
 }
+import org.mindrot.jbcrypt.BCrypt
 import sttp.model.StatusCode
 import sttp.tapir.ztapir.*
 import zio.*
@@ -57,10 +59,19 @@ object EndpointsImpl:
     val pulito = Option(msg).getOrElse("")
     if pulito.isEmpty || pulito.length > 300 || pulito.contains("<") then MSG_ERRORE_GENERICO else pulito
 
+  private val ENDPOINT_RICHIEDI = "/api/auth/richiedi-accesso"
+  private val LIMITE_RICHIEDI   = 5
+
   private case object RateLimitedException extends RuntimeException("Troppe richieste. Riprova tra qualche minuto.")
   private case object CredenzialiNonValideException extends RuntimeException("Credenziali non valide")
   private case object TestoMancanteException extends RuntimeException("Testo mancante")
   private case object UrlMancanteException extends RuntimeException("URL mancante")
+  private case object EmailNonValidaException extends RuntimeException("Email non valida")
+  private case object PasswordTroppoCortaException extends RuntimeException("La password deve avere almeno 8 caratteri")
+  private case object AccountGiaEsistenteException
+      extends RuntimeException("Esiste già un account con questa email: prova ad accedere invece di registrarti")
+  private case object RichiestaGiaInCorsoException
+      extends RuntimeException("C'è già una richiesta di accesso in corso per questa email")
   private final case class TestoTroppoLungoException(max: Int)
       extends RuntimeException(s"Testo troppo lungo (max $max caratteri)")
   private final case class QuotaEsauritaException(quota: QuotaDto)
@@ -74,6 +85,10 @@ object EndpointsImpl:
     case UrlMancanteException          => (StatusCode.BadRequest, ErroreApi(e.getMessage))
     case TestoTroppoLungoException(_)  => (StatusCode.PayloadTooLarge, ErroreApi(e.getMessage))
     case QuotaEsauritaException(quota) => (StatusCode.TooManyRequests, ErroreApi(e.getMessage, Some(quota)))
+    case EmailNonValidaException       => (StatusCode.BadRequest, ErroreApi(e.getMessage))
+    case PasswordTroppoCortaException  => (StatusCode.BadRequest, ErroreApi(e.getMessage))
+    case AccountGiaEsistenteException  => (StatusCode.Conflict, ErroreApi(e.getMessage))
+    case RichiestaGiaInCorsoException  => (StatusCode.Conflict, ErroreApi(e.getMessage))
     case AnalisiFallitaException(msg)  => (StatusCode.BadGateway, ErroreApi(messaggioPubblico(msg)))
     case err: EstraiArticolo.ErroreArticolo =>
       (StatusCode.UnprocessableEntity, ErroreApi(Option(err.getMessage).map(messaggioPubblico).getOrElse("Impossibile recuperare l'articolo")))
@@ -100,6 +115,63 @@ object EndpointsImpl:
         yield LoginResponse(token, utente.email, quota)
       effetto.mapError(mappaErrore)
     }
+
+  private def hashPassword(password: String): Task[String] =
+    ZIO.attemptBlocking(BCrypt.hashpw(password, BCrypt.gensalt(12)))
+
+  // Pubblico: crea una riga in richiesta_accesso ("in_attesa") e invia due
+  // email best-effort (alert all'admin + auto-risposta al richiedente) —
+  // nessun login immediato, l'attivazione è manuale (vedi GestisciRichieste).
+  private def richiediAccessoLogic(input: (RichiediAccessoRequest, String)): ZIO[Env, (StatusCode, ErroreApi), MessaggioOk] =
+    val (req, ip) = input
+    val email     = req.email.toLowerCase.trim
+    val password  = req.password
+
+    val effetto: RIO[Env, MessaggioOk] =
+      for
+        limitato <- Sicurezza.superaLimite(ip, ENDPOINT_RICHIEDI, LIMITE_RICHIEDI, FINESTRA_MINUTI)
+        _ <- ZIO.when(limitato)(
+          Sicurezza.registraEvento(ip, ENDPOINT_RICHIEDI, "rate-limited") *> ZIO.fail(RateLimitedException),
+        )
+        _    <- ZIO.when(email.isEmpty || !email.contains("@"))(ZIO.fail(EmailNonValidaException))
+        _    <- ZIO.when(password.length < 8)(ZIO.fail(PasswordTroppoCortaException))
+        repo <- ZIO.service[Repo]
+        cfg  <- ZIO.service[AppConfig]
+        esistente <- repo.trovaWhitelist(email)
+        _         <- ZIO.when(esistente.isDefined)(ZIO.fail(AccountGiaEsistenteException))
+        pendente  <- repo.trovaRichiestaPendente(email)
+        _         <- ZIO.when(pendente.isDefined)(ZIO.fail(RichiestaGiaInCorsoException))
+        hash <- hashPassword(password)
+        richiesta = RichiestaAccesso(
+          id = UUID.randomUUID().toString,
+          email = email,
+          passwordHash = hash,
+          stato = "in_attesa",
+          createdAt = Instant.now(),
+          gestitaAt = None,
+        )
+        _ <- repo.inserisciRichiestaAccesso(richiesta)
+        _ <- Sicurezza.registraEvento(ip, ENDPOINT_RICHIEDI, "successo")
+        _ <- EmailService.invia(
+          cfg.email,
+          cfg.email.admin,
+          "Nuova richiesta di accesso — Policy Decoder",
+          s"<p>Nuova richiesta di accesso da <b>$email</b>.</p>" +
+            s"<p>Approva o rifiuta da riga di comando (decoder.backend.cli.GestisciRichieste).</p>",
+        )
+        _ <- EmailService.invia(
+          cfg.email,
+          email,
+          "Richiesta ricevuta — Policy Decoder",
+          "<p>Grazie per la tua richiesta di accesso a Policy Decoder.</p>" +
+            "<p>Stiamo revisionando la richiesta: appena approvata riceverai una email di conferma.</p>",
+        )
+      yield MessaggioOk("Richiesta inviata. Riceverai una email quando sarà approvata.")
+
+    effetto.mapError(mappaErrore)
+
+  private val richiediAccessoEndpoint: ZServerEndpoint[Env, Any] =
+    Endpoints.richiediAccesso.zServerLogic(richiediAccessoLogic)
 
   private val usageEndpoint: ZServerEndpoint[Env, Any] =
     Endpoints.usage.zServerSecurityLogic(securityLogic).serverLogic { utente => _ =>
@@ -261,4 +333,4 @@ object EndpointsImpl:
     Endpoints.exportPdf.zServerSecurityLogic(securityLogic).serverLogic(_ => req => exportPdfLogic(req))
 
   val all: List[ZServerEndpoint[Env, Any]] =
-    List(loginEndpoint, usageEndpoint, analyzeEndpoint, fetchUrlEndpoint, exportPdfEndpoint)
+    List(loginEndpoint, richiediAccessoEndpoint, usageEndpoint, analyzeEndpoint, fetchUrlEndpoint, exportPdfEndpoint)

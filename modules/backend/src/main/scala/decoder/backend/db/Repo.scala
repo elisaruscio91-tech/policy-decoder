@@ -18,6 +18,7 @@ final class Repo(ctx: Db.Ctx):
   inline def whitelistEntries = querySchema[WhitelistEntry]("whitelist_entry")
   inline def eventiSicurezza = querySchema[EventoSicurezza]("evento_sicurezza")
   inline def analisiRichieste = querySchema[AnalisiRichiesta]("analisi_richiesta")
+  inline def richiesteAccesso = querySchema[RichiestaAccesso]("richiesta_accesso")
 
   def trovaWhitelist(email: String): Task[Option[WhitelistEntry]] =
     run(whitelistEntries.filter(_.email == lift(email))).map(_.headOption)
@@ -63,6 +64,18 @@ final class Repo(ctx: Db.Ctx):
         .filter(a => a.userId == lift(userId) && a.esito == lift("successo") && a.createdAt >= lift(inizioMese))
         .size
     }
+
+  def inserisciRichiestaAccesso(r: RichiestaAccesso): Task[Unit] =
+    run(richiesteAccesso.insertValue(lift(r))).unit
+
+  def trovaRichiestaPendente(email: String): Task[Option[RichiestaAccesso]] =
+    run(richiesteAccesso.filter(r => r.email == lift(email) && r.stato == lift("in_attesa"))).map(_.headOption)
+
+  def listaRichiestePendenti(): Task[List[RichiestaAccesso]] =
+    run(richiesteAccesso.filter(_.stato == lift("in_attesa")))
+
+  def segnaRichiesta(id: String, stato: String, gestitaAt: Instant): Task[Long] =
+    run(richiesteAccesso.filter(_.id == lift(id)).update(_.stato -> lift(stato), _.gestitaAt -> lift(Option(gestitaAt))))
 
 object Repo:
   val layer: URLayer[Db.Ctx, Repo] = ZLayer.fromFunction(Repo(_))

@@ -12,9 +12,13 @@ import scala.util.{Failure, Success}
 // cookie httpOnly: "logout" è solo "il frontend dimentica il token").
 object App:
 
+  private enum Vista:
+    case Accesso, Registrazione
+
   private val tokenVar = Var(Api.leggiToken())
   private val emailVar = Var(Api.leggiEmail())
   private val quotaVar = Var(Option.empty[Quota])
+  private val vistaVar = Var[Vista](Vista.Accesso)
 
   private def logout(): Unit =
     Api.rimuoviToken()
@@ -42,8 +46,11 @@ object App:
 
   val root: HtmlElement =
     div(
-      child <-- tokenVar.signal.map {
-        case None        => LoginView.render(onLoginSuccess)
-        case Some(token) => AnalyzeView.render(token, emailVar.signal, quotaVar, () => logout(), aggiornaQuota)
+      child <-- tokenVar.signal.combineWith(vistaVar.signal).map {
+        case (Some(token), _) => AnalyzeView.render(token, emailVar.signal, quotaVar, () => logout(), aggiornaQuota)
+        case (None, Vista.Accesso) =>
+          LoginView.render(onLoginSuccess, () => vistaVar.set(Vista.Registrazione))
+        case (None, Vista.Registrazione) =>
+          RegisterView.render(() => vistaVar.set(Vista.Accesso))
       },
     )

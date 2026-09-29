@@ -36,6 +36,17 @@ object Endpoints:
       .out(jsonBody[LoginResponse])
       .errorOut(statusCode.and(jsonBody[ErroreApi]))
 
+  // Form "Registrati": pubblico (nessun bearer, l'utente non ha ancora un
+  // account), crea una riga in richiesta_accesso in stato "in_attesa" —
+  // l'attivazione vera e propria è manuale (vedi GestisciRichieste, CLI).
+  val richiediAccesso =
+    endpoint.post
+      .in(apiBase / "auth" / "richiedi-accesso")
+      .in(jsonBody[RichiediAccessoRequest])
+      .in(ip)
+      .out(jsonBody[MessaggioOk])
+      .errorOut(statusCode.and(jsonBody[ErroreApi]))
+
   val usage =
     endpoint.get
       .securityIn(auth.bearer[String]())
@@ -76,4 +87,4 @@ object Endpoints:
       .out(header[String]("Content-Disposition"))
       .errorOut(statusCode.and(jsonBody[ErroreApi]))
 
-  val all: List[AnyEndpoint] = List(login, usage, analyze, fetchUrl, exportPdf)
+  val all: List[AnyEndpoint] = List(login, richiediAccesso, usage, analyze, fetchUrl, exportPdf)

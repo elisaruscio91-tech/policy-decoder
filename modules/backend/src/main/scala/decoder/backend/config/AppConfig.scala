@@ -8,6 +8,13 @@ final case class OpenRouterCfg(apiKey: String, model: String)
 final case class OllamaCfg(baseUrl: String, apiKey: Option[String], model: String)
 final case class AiCfg(provider: String, anthropic: AnthropicCfg, openrouter: OpenRouterCfg, ollama: OllamaCfg)
 
+// Resend (https://resend.com): API HTTP via sttp, nessuna nuova dipendenza
+// pesante. "from" richiede un dominio verificato sull'account Resend per
+// poter scrivere a indirizzi arbitrari (il sender di test "onboarding@
+// resend.dev" può scrivere solo all'indirizzo email dell'account stesso) —
+// vedi EmailService.
+final case class EmailCfg(resendApiKey: String, from: String, admin: String)
+
 final case class AppConfig(
   port: Int,
   jwtSecret: String,
@@ -15,6 +22,7 @@ final case class AppConfig(
   ai: AiCfg,
   defaultMonthlyQuota: Int,
   embeddingModel: String,
+  email: EmailCfg,
 )
 
 object AppConfig:
@@ -47,6 +55,11 @@ object AppConfig:
       ),
       defaultMonthlyQuota = c.getInt("quota.default-monthly"),
       embeddingModel = c.getString("embedding.model"),
+      email = EmailCfg(
+        resendApiKey = opt(c, "email.resend-api-key").getOrElse(""),
+        from = c.getString("email.from"),
+        admin = c.getString("email.admin"),
+      ),
     )
   }
 

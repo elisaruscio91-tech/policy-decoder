@@ -423,6 +423,47 @@ form button[type="submit"]:disabled {
   margin-top: 8px;
 }
 
+.intro-landing {
+  font-size: 13px;
+  color: var(--testo-debole);
+  line-height: 1.6;
+  text-align: center;
+  margin: 0 0 20px;
+}
+
+.link-secondario {
+  background: none;
+  border: none;
+  color: var(--viola-chiaro);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+  margin-top: 14px;
+  width: 100%;
+}
+
+.link-secondario:hover {
+  color: var(--azzurro);
+}
+
+.nota-abbonamento {
+  font-size: 12px;
+  color: var(--testo-debole);
+  line-height: 1.6;
+  text-align: center;
+  margin-top: 18px;
+}
+
+.messaggio-ok {
+  margin-top: 12px;
+  padding: 9px 14px;
+  border-radius: 9px;
+  background: #051408;
+  border: 1px solid #16a34a30;
+  color: #86efac;
+  font-size: 13px;
+}
+
 /* ── Risultato dell'analisi ─────────────────────────────────────── */
 
 .risultato {

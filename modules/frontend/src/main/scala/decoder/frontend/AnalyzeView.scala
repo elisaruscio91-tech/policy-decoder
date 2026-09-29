@@ -367,7 +367,7 @@ object AnalyzeView:
               ),
             ),
           ).flatten
-          div(cls := "azioni-download", pulsanti*)
+          div(((cls := "azioni-download") +: pulsanti)*)
         }),
         child.maybe <-- risultatoVar.signal.map(_.map(renderRisultato)),
       ),

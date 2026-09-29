@@ -61,4 +61,19 @@ object Endpoints:
       .out(jsonBody[Articolo])
       .errorOut(statusCode.and(jsonBody[ErroreApi]))
 
-  val all: List[AnyEndpoint] = List(login, usage, analyze, fetchUrl)
+  // Genera un PDF lato server a partire da un risultato che il client ha già
+  // ricevuto: niente nuova chiamata all'IA, solo formattazione. Output binario
+  // con Content-Type/Content-Disposition impostati esplicitamente dalla logica
+  // server (vedi EndpointsImpl) così il browser propone subito il salvataggio
+  // del file col nome giusto invece di mostrarlo inline.
+  val exportPdf =
+    endpoint.post
+      .securityIn(auth.bearer[String]())
+      .in(apiBase / "analyze" / "pdf")
+      .in(jsonBody[ExportPdfRequest])
+      .out(byteArrayBody)
+      .out(header[String]("Content-Type"))
+      .out(header[String]("Content-Disposition"))
+      .errorOut(statusCode.and(jsonBody[ErroreApi]))
+
+  val all: List[AnyEndpoint] = List(login, usage, analyze, fetchUrl, exportPdf)

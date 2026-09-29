@@ -33,6 +33,7 @@ object LoginView:
 
     div(
       cls := "login",
+      I18n.switch,
       div(
         cls := "marchio",
         img(src := "./acet-logo.svg", cls := "logo-acet", alt := "ACET"),
@@ -54,10 +55,10 @@ object LoginView:
           ),
         ),
         div(
-          label("Codice 2FA (se abilitato)"),
+          label(child.text <-- I18n.tr("Codice 2FA (se abilitato)", "2FA code (if enabled)")),
           input(typ := "text", onInput.mapToValue --> codiceVar.writer, value <-- codiceVar.signal),
         ),
         child.maybe <-- erroreVar.signal.map(_.map(msg => div(cls := "errore", msg))),
-        button(typ := "submit", disabled <-- inCorsoVar.signal, "Accedi"),
+        button(typ := "submit", disabled <-- inCorsoVar.signal, child.text <-- I18n.tr("Accedi", "Login")),
       ),
     )

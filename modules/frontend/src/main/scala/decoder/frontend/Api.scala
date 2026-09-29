@@ -77,3 +77,11 @@ object Api:
       .apply((req, ""))
       .send(backend)
       .map(_.body)
+
+  def exportPdf(token: String, req: ExportPdfRequest): Future[Either[(StatusCode, ErroreApi), Array[Byte]]] =
+    interpreter
+      .toSecureRequestThrowDecodeFailures(Endpoints.exportPdf, baseUri)
+      .apply(token)
+      .apply(req)
+      .send(backend)
+      .map(_.body.map { case (bytes, _, _) => bytes })

@@ -165,6 +165,35 @@ a {
   color: var(--viola-chiaro);
 }
 
+/* ── Selettore lingua interfaccia (IT/EN) ──────────────────────────── */
+
+.lingua-switch {
+  display: flex;
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.lingua-switch button {
+  background: none;
+  border: none;
+  color: var(--testo-debole);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.lingua-switch button.attivo {
+  background: var(--viola-1);
+  color: #fff;
+}
+
+.login .lingua-switch {
+  margin: 0 auto 16px;
+  width: fit-content;
+}
+
 /* ── Contenuto principale ──────────────────────────────────────── */
 
 .contenuto {
@@ -317,6 +346,36 @@ form button[type="submit"]:disabled {
   margin-top: 12px;
   color: var(--testo-muto);
   font-size: 13px;
+}
+
+/* ── Download PDF ───────────────────────────────────────────────── */
+
+.azioni-download {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.azioni-download button {
+  padding: 8px 18px;
+  border-radius: 9px;
+  border: 1px solid var(--viola-1);
+  background: none;
+  color: var(--viola-chiaro);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.azioni-download button:hover:not(:disabled) {
+  background: #1a0d2e;
+}
+
+.azioni-download button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ── Login ──────────────────────────────────────────────────────── */
@@ -640,6 +699,11 @@ form button[type="submit"]:disabled {
 }
 
 /* Slide social */
+
+.nota-slide {
+  font-style: italic;
+  margin-bottom: 4px !important;
+}
 
 .slides {
   display: flex;

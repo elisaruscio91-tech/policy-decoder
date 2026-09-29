@@ -6,10 +6,11 @@ import decoder.backend.db.{AnalisiRichiesta, Repo}
 import decoder.backend.fonti.{Fonti, FontiRepo}
 import decoder.backend.http.HttpClient
 import decoder.backend.ia.{MotoreIA, PromptSistema}
+import decoder.backend.pdf.PdfExport
 import decoder.backend.quota.Quota
 import decoder.backend.sicurezza.{Auth, Sicurezza}
 import decoder.shared.{
-  AnalyzeRequest, AnalyzeResponse, Articolo, Endpoints, ErroreApi,
+  AnalyzeRequest, AnalyzeResponse, Articolo, Endpoints, ErroreApi, ExportPdfRequest,
   FetchUrlRequest, LoginRequest, LoginResponse, RisultatoAnalisi,
   Quota as QuotaDto,
 }
@@ -243,4 +244,21 @@ object EndpointsImpl:
   private val fetchUrlEndpoint: ZServerEndpoint[Env, Any] =
     Endpoints.fetchUrl.zServerSecurityLogic(securityLogic).serverLogic(utente => fetchUrlLogic(utente))
 
-  val all: List[ZServerEndpoint[Env, Any]] = List(loginEndpoint, usageEndpoint, analyzeEndpoint, fetchUrlEndpoint)
+  // Nessuna chiamata all'IA qui: il client rimanda un RisultatoAnalisi che ha
+  // già ricevuto, PdfExport si occupa solo della formattazione. Autenticato
+  // come gli altri endpoint, ma senza controlli di quota/rate-limit (costo
+  // trascurabile, nessun accesso a risorse esterne).
+  private def exportPdfLogic(req: ExportPdfRequest): ZIO[Env, (StatusCode, ErroreApi), (Array[Byte], String, String)] =
+    val uiLang   = if req.uiLang == "en" then "en" else "it"
+    val scope    = if req.scope == "slide" then "slide" else "tutto"
+    val nomeFile = if scope == "slide" then "policy-decoder-slide-social.pdf" else "policy-decoder-analisi.pdf"
+    val effetto: RIO[Env, (Array[Byte], String, String)] =
+      ZIO.attempt(PdfExport.genera(req.risultato, uiLang, scope))
+        .map(bytes => (bytes, "application/pdf", s"""attachment; filename="$nomeFile""""))
+    effetto.mapError(mappaErrore)
+
+  private val exportPdfEndpoint: ZServerEndpoint[Env, Any] =
+    Endpoints.exportPdf.zServerSecurityLogic(securityLogic).serverLogic(_ => req => exportPdfLogic(req))
+
+  val all: List[ZServerEndpoint[Env, Any]] =
+    List(loginEndpoint, usageEndpoint, analyzeEndpoint, fetchUrlEndpoint, exportPdfEndpoint)

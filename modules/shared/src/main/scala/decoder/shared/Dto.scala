@@ -97,3 +97,11 @@ object AnalyzeResponse:
 final case class ErroreApi(error: String, quota: Option[Quota] = None)
 object ErroreApi:
   given Codec[ErroreApi] = deriveCodec
+
+// Richiesta di export PDF: il client rimanda il risultato che ha già in
+// memoria (nessuna nuova chiamata all'IA) insieme alla lingua dell'interfaccia
+// (per le etichette statiche del PDF, es. "Sintesi" vs "Summary") e allo scopo
+// ("tutto" = analisi completa, "slide" = solo la sezione slide social).
+final case class ExportPdfRequest(risultato: RisultatoAnalisi, uiLang: String, scope: String)
+object ExportPdfRequest:
+  given Codec[ExportPdfRequest] = deriveCodec

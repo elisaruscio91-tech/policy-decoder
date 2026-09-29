@@ -226,7 +226,11 @@ object EndpointsImpl:
           Sicurezza.registraEvento(ip, ENDPOINT_FETCH, "fallimento") *> ZIO.fail(UrlMancanteException),
         )
         articolo <- EstraiArticolo.estraiArticolo(url).foldZIO(
-          errore => Sicurezza.registraEvento(ip, ENDPOINT_FETCH, "fallimento") *> ZIO.fail(errore),
+          errore =>
+            val msg   = Option(errore.getMessage).getOrElse("Estrazione fallita")
+            val causa = Option(errore.getCause).map(c => s"${c.getClass.getSimpleName}: ${c.getMessage}")
+            ZIO.logWarning(s"fetch-url fallito: $msg" + causa.map(c => s" | causa: $c").getOrElse("")) *>
+            Sicurezza.registraEvento(ip, ENDPOINT_FETCH, "fallimento") *> ZIO.fail(errore),
           art => Sicurezza.registraEvento(ip, ENDPOINT_FETCH, "successo").as(art),
         )
       yield articolo

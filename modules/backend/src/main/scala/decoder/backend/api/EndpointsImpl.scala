@@ -166,7 +166,11 @@ object EndpointsImpl:
           errore =>
             val durataMs = java.time.Duration.between(inizio, Instant.now()).toMillis.toInt
             val msg      = Option(errore.getMessage).getOrElse("Analisi fallita")
-            ZIO.logWarning(s"analyze fallito: $msg") *>
+            // errore.getMessage spesso è solo un involucro generico (es. sttp
+            // "Exception when sending request: ..."): la causa vera è nella
+            // catena delle cause, utile solo nei log (mai esposta all'utente).
+            val causa = Option(errore.getCause).map(c => s"${c.getClass.getSimpleName}: ${c.getMessage}")
+            ZIO.logWarning(s"analyze fallito: $msg" + causa.map(c => s" | causa: $c").getOrElse("")) *>
             ZIO.serviceWithZIO[Repo](
               _.registraAnalisi(
                 AnalisiRichiesta(

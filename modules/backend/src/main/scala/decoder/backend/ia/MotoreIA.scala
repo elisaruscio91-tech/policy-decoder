@@ -8,6 +8,8 @@ import sttp.client3.*
 import sttp.model.Uri
 import zio.*
 
+import scala.concurrent.duration.*
+
 // Astrazione sul motore di analisi: Anthropic, OpenRouter, o Ollama
 // self-hosted (privacy massima: il testo non lascia la tua VM). Cambiare
 // motore = cambiare AI_PROVIDER in application.conf/env, zero modifiche al
@@ -15,6 +17,10 @@ import zio.*
 object MotoreIA:
 
   private val MAX_TOKENS = 8192
+  // Il timeout di default del backend HTTP (60s) è troppo basso per
+  // un'analisi con output fino a MAX_TOKENS: il modello può impiegare
+  // più tempo di una chiamata API qualunque.
+  private val TIMEOUT_MODELLO = 180.seconds
 
   private def estraiMessaggioErrore(json: Json, fallback: String): String =
     json.hcursor.downField("error").downField("message").as[String].getOrElse(fallback)
@@ -37,6 +43,7 @@ object MotoreIA:
           .contentType("application/json")
           .body(body.noSpaces)
           .response(asStringAlways)
+          .readTimeout(TIMEOUT_MODELLO)
           .send(backend)
         json <- ZIO.fromEither(parser.parse(resp.body))
           .mapError(e => new RuntimeException(s"Risposta Anthropic non interpretabile: ${e.getMessage}"))
@@ -69,6 +76,7 @@ object MotoreIA:
           .contentType("application/json")
           .body(body.noSpaces)
           .response(asStringAlways)
+          .readTimeout(TIMEOUT_MODELLO)
           .send(backend)
         json <- ZIO.fromEither(parser.parse(resp.body))
           .mapError(e => new RuntimeException(s"Risposta OpenRouter non interpretabile: ${e.getMessage}"))
@@ -100,6 +108,7 @@ object MotoreIA:
           .contentType("application/json")
           .body(body.noSpaces)
           .response(asStringAlways)
+          .readTimeout(TIMEOUT_MODELLO)
           .send(backend)
         json <- ZIO.fromEither(parser.parse(resp.body))
           .mapError(e => new RuntimeException(s"Risposta Ollama non interpretabile: ${e.getMessage}"))

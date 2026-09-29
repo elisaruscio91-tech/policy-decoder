@@ -27,6 +27,13 @@ object Api:
   private val TOKEN_KEY = "policy-decoder-token"
   private val EMAIL_KEY = "policy-decoder-email"
 
+  // sttp3 applica un readTimeout di default di 60s su ogni richiesta: troppo
+  // poco per /api/analyze, che può richiedere fino a ~180s lato server per
+  // l'elaborazione IA. Senza questo override il browser annulla la fetch
+  // (visibile come "(canceled)" nel Network tab) anche quando il server sta
+  // ancora lavorando e risponderebbe correttamente.
+  private val TIMEOUT_ANALISI = scala.concurrent.duration.Duration(200, java.util.concurrent.TimeUnit.SECONDS)
+
   def leggiToken(): Option[String] = Option(dom.window.sessionStorage.getItem(TOKEN_KEY))
   def salvaToken(token: String): Unit = dom.window.sessionStorage.setItem(TOKEN_KEY, token)
   def rimuoviToken(): Unit = dom.window.sessionStorage.removeItem(TOKEN_KEY)
@@ -59,6 +66,7 @@ object Api:
       .toSecureRequestThrowDecodeFailures(Endpoints.analyze, baseUri)
       .apply(token)
       .apply((req, ""))
+      .readTimeout(TIMEOUT_ANALISI)
       .send(backend)
       .map(_.body)
 

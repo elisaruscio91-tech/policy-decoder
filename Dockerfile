@@ -41,4 +41,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:8080/api/health || exit 1
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# -Xmx esplicito: senza limite, la JVM su questa VPS da 2GB (condivisa con
+# altri 7 container Docker: 2 Postgres, Coolify, Redis, realtime, sentinel,
+# Traefik) può crescere abbastanza da far scattare l'OOM-killer del kernel,
+# che uccide il processo Java senza lasciare traccia nei log applicativi
+# (crash silenzioso, non un'eccezione gestita). Un tetto esplicito fa sì che
+# sia la JVM stessa a gestire l'esaurimento della memoria (OutOfMemoryError,
+# visibile nei log) invece del kernel.
+ENTRYPOINT ["java", "-Xmx512m", "-jar", "app.jar"]

@@ -344,8 +344,21 @@ form button[type="submit"]:disabled {
 
 .in-corso {
   margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   color: var(--testo-muto);
   font-size: 13px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--bordo);
+  border-top-color: var(--viola-2);
+  animation: spin 0.8s linear infinite;
+  flex: 0 0 auto;
 }
 
 /* ── Download PDF ───────────────────────────────────────────────── */

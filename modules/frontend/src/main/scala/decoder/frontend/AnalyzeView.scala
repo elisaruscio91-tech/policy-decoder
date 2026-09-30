@@ -346,7 +346,13 @@ object AnalyzeView:
           ),
           button(disabled <-- inCorsoVar.signal, onClick --> (_ => submit()), child.text <-- I18n.tr("Analizza", "Analyze")),
         ),
-        child.maybe <-- inCorsoVar.signal.map(Option.when(_)(p(cls := "in-corso", child.text <-- I18n.tr("Analisi in corso...", "Analysis in progress...")))),
+        child.maybe <-- inCorsoVar.signal.map(Option.when(_)(
+          div(
+            cls := "in-corso",
+            div(cls := "spinner"),
+            span(child.text <-- I18n.tr("Attendi che l'analisi venga elaborata...", "Please wait while the analysis is processed...")),
+          ),
+        )),
         child.maybe <-- erroreVar.signal.map(_.map(msg => p(cls := "errore", msg))),
         child.maybe <-- risultatoVar.signal.map(_.map { r =>
           val pulsanti: Seq[HtmlElement] = Seq(

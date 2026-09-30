@@ -15,7 +15,7 @@ import scala.util.{Failure, Success}
 // l'IA scrive il testo dell'analisi.
 object AnalyzeView:
 
-  private val MAX_CARATTERI = 20_000
+  private val MAX_CARATTERI = 60_000
   private val EMAIL_ASSISTENZA = "elisa.ruscio@proton.me"
 
   private def msgErroreGenerico(): String =

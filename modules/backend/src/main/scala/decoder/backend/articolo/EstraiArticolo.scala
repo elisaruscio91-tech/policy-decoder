@@ -33,6 +33,13 @@ object EstraiArticolo:
   // ricevuto la richiesta ma l'ha rifiutata attivamente, a differenza di un
   // 404/500 generico.
   private val CODICI_BLOCCO = Set(401, 403, 429, 451)
+  // Servizio pubblico di estrazione testo (r.jina.ai/<url originale>): usato
+  // come fallback quando il sito blocca la richiesta diretta dal nostro
+  // server — la richiesta parte dai loro server, non dal nostro, quindi
+  // aggira il blocco IP/bot-detection senza bisogno di mascherare nulla da
+  // parte nostra. Nessun rischio SSRF: l'host è fisso (r.jina.ai) e l'URL
+  // originale è già stato validato da validaUrlSicuro prima di arrivare qui.
+  private val JINA_READER_PREFIX = "https://r.jina.ai/"
 
   private def ipPrivato(addr: InetAddress): Boolean =
     addr match
@@ -96,6 +103,34 @@ object EstraiArticolo:
       risultato <- gestisciRisposta(backend, url, redirectsRimasti, resp)
     yield risultato
 
+  // Jina restituisce già testo pulito (markdown semplice, tipicamente con un
+  // "Title: ..." in cima) — niente Readability4J qui, l'HTML non c'entra.
+  private def estraiViaFallback(url: JUri, backend: HttpClient.Backend): Task[Articolo] =
+    for
+      uriFallback <- ZIO
+        .fromEither(Uri.parse(JINA_READER_PREFIX + url.toString))
+        .mapError(e => ErroreArticolo(s"URL fallback non valido: $e"))
+      resp <- basicRequest
+        .get(uriFallback)
+        .header("User-Agent", USER_AGENT)
+        .header("Accept", "text/plain")
+        .readTimeout(TIMEOUT)
+        .response(asStringAlways)
+        .send(backend)
+      _ <- ZIO.when(!resp.code.isSuccess)(
+        ZIO.fail(ErroreArticolo(s"Servizio di lettura alternativo non disponibile (${resp.code.code})")),
+      )
+      _ <- ZIO.when(resp.body.getBytes("UTF-8").length > MAX_BYTES)(ZIO.fail(ErroreArticolo("Pagina troppo grande")))
+      testo = resp.body.trim
+      _ <- ZIO.when(testo.isEmpty)(ZIO.fail(ErroreArticolo("Servizio di lettura alternativo ha restituito una pagina vuota")))
+    yield
+      val titolo = testo.linesIterator
+        .find(_.trim.nonEmpty)
+        .map(_.stripPrefix("Title:").trim)
+        .filter(_.nonEmpty)
+        .getOrElse(url.getHost)
+      Articolo(titolo = titolo, testo = testo, fonte = url.toString)
+
   private def estraiConReadability(url: JUri, html: String): Task[Articolo] =
     ZIO.attemptBlocking {
       val readability = new Readability4J(url.toString, html)
@@ -114,6 +149,7 @@ object EstraiArticolo:
     for
       backend     <- ZIO.service[HttpClient.Backend]
       urlIniziale <- ZIO.attempt(new JUri(urlInput)).mapError(_ => ErroreArticolo("URL non valido"))
-      risultato   <- loop(backend, urlIniziale, MAX_REDIRECTS)
-      articolo    <- estraiConReadability(risultato._1, risultato._2)
+      articolo <- loop(backend, urlIniziale, MAX_REDIRECTS)
+        .flatMap { case (urlFinale, html) => estraiConReadability(urlFinale, html) }
+        .catchSome { case _: SitoBloccatoException => estraiViaFallback(urlIniziale, backend) }
     yield articolo

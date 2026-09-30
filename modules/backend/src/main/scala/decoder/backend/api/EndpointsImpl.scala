@@ -37,12 +37,10 @@ object EndpointsImpl:
   private val LIMITE_ANALYZE   = 30
   private val LIMITE_FETCH     = 20
   private val FINESTRA_MINUTI  = 10
-  private val MAX_CARATTERI_INPUT = 20_000
-  // Limite più permissivo per gli articoli estratti da URL: a differenza del
-  // testo incollato a mano, qui la lunghezza dipende dal sito (articoli
-  // lunghi, o contenuti extra come box "correlati" annidati nello stesso
-  // tag <article> che Readability4J non riesce sempre a isolare) e l'utente
-  // non ha modo di accorciarla lui stesso.
+  // Stesso limite del testo estratto da URL (vedi MAX_CARATTERI_URL): non
+  // c'è più motivo di tenerlo più basso, un utente può incollare un articolo
+  // lungo tanto quanto uno che verrebbe estratto automaticamente.
+  private val MAX_CARATTERI_INPUT = 60_000
   private val MAX_CARATTERI_URL = 60_000
   private val LINGUE_VALIDE = Set("auto", "en", "it")
   private val EMAIL_ASSISTENZA = "elisa.ruscio@proton.me"

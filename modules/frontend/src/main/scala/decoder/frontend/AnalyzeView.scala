@@ -32,6 +32,17 @@ object AnalyzeView:
     val pulito = Option(raw).getOrElse("")
     if pulito.isEmpty || pulito.length > 300 || pulito.contains("<") then msgErroreGenerico() else pulito
 
+  // Alcuni errori (es. sito che blocca la lettura automatica dell'URL)
+  // arrivano dal backend come marker anziché testo, perché il messaggio va
+  // mostrato bilingue tramite I18n invece che nella sola lingua del backend.
+  private def traduciErrore(raw: String): String =
+    if raw == CodiciErrore.SitoBloccatoLettura then
+      I18n.now(
+        "Il sito ha bloccato la richiesta di lettura automatica dell'URL. Copia il testo dell'articolo e usa lo strumento \"Testo\" invece di \"URL\".",
+        "The site blocked the automatic URL reading request. Copy the article's text and use the \"Text\" tool instead of \"URL\".",
+      )
+    else messaggioSicuro(raw)
+
   // Palette di colori per punteggio di rischio / gravità / verdetto,
   // ripresa 1:1 dalla vecchia versione React.
   private def coloreRischio(score: Int): String =
@@ -101,7 +112,7 @@ object AnalyzeView:
             risultatoVar.set(Some(ris))
           case Success(Left(msg)) =>
             inCorsoVar.set(false)
-            erroreVar.set(Some(messaggioSicuro(msg)))
+            erroreVar.set(Some(traduciErrore(msg)))
           case Failure(_) =>
             // Errori di rete/decodifica (es. il server non ha risposto affatto,
             // o un proxy davanti ad esso ha restituito una sua pagina di

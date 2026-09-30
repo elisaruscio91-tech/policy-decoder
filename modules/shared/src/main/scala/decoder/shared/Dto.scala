@@ -116,3 +116,9 @@ object RichiediAccessoRequest:
 final case class MessaggioOk(messaggio: String)
 object MessaggioOk:
   given Codec[MessaggioOk] = deriveCodec
+
+// Marker usati al posto di un messaggio d'errore grezzo quando il frontend
+// deve mostrare un testo bilingue tradotto localmente (via I18n) invece del
+// messaggio del backend, che è solo in italiano.
+object CodiciErrore:
+  val SitoBloccatoLettura = "SITO_BLOCCATO_LETTURA_AUTOMATICA"

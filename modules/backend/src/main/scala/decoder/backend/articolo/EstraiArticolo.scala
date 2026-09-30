@@ -19,11 +19,20 @@ object EstraiArticolo:
 
   final case class ErroreArticolo(messaggio: String) extends Exception(messaggio)
 
+  // Il sito ha attivamente rifiutato la richiesta (bot-detection, blocco IP
+  // datacenter, ecc.) — distinto da ErroreArticolo perché EndpointsImpl deve
+  // tradurlo in un messaggio bilingue dedicato invece di un errore generico.
+  final case class SitoBloccatoException(codice: Int) extends Exception(s"Il sito ha bloccato la richiesta automatica ($codice)")
+
   private val MAX_BYTES     = 3 * 1024 * 1024 // 3MB
   private val TIMEOUT       = 10.seconds
   private val MAX_REDIRECTS = 3
   private val USER_AGENT    = "Mozilla/5.0 (compatible; PolicyDecoderBot/1.0; +https://associazionetransgenere.org)"
   private val CODICI_REDIRECT = Set(301, 302, 303, 307, 308)
+  // Codici tipici di bot-detection / blocco geografico o IP: il sito ha
+  // ricevuto la richiesta ma l'ha rifiutata attivamente, a differenza di un
+  // 404/500 generico.
+  private val CODICI_BLOCCO = Set(401, 403, 429, 451)
 
   private def ipPrivato(addr: InetAddress): Boolean =
     addr match
@@ -63,6 +72,7 @@ object EstraiArticolo:
           ZIO.attempt(url.resolve(location)).flatMap(loop(backend, _, redirectsRimasti - 1))
         case _ =>
           ZIO.fail(ErroreArticolo("Troppi redirect o redirect mancante"))
+    else if CODICI_BLOCCO.contains(codice) then ZIO.fail(SitoBloccatoException(codice))
     else if !resp.code.isSuccess then ZIO.fail(ErroreArticolo(s"Impossibile recuperare la pagina ($codice)"))
     else
       val contentType = resp.header("content-type").getOrElse("")

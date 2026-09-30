@@ -90,6 +90,8 @@ object EndpointsImpl:
     case AccountGiaEsistenteException  => (StatusCode.Conflict, ErroreApi(e.getMessage))
     case RichiestaGiaInCorsoException  => (StatusCode.Conflict, ErroreApi(e.getMessage))
     case AnalisiFallitaException(msg)  => (StatusCode.BadGateway, ErroreApi(messaggioPubblico(msg)))
+    case _: EstraiArticolo.SitoBloccatoException =>
+      (StatusCode.UnprocessableEntity, ErroreApi(decoder.shared.CodiciErrore.SitoBloccatoLettura))
     case err: EstraiArticolo.ErroreArticolo =>
       (StatusCode.UnprocessableEntity, ErroreApi(Option(err.getMessage).map(messaggioPubblico).getOrElse("Impossibile recuperare l'articolo")))
     case _ => (StatusCode.InternalServerError, ErroreApi(messaggioPubblico(Option(e.getMessage).getOrElse(""))))

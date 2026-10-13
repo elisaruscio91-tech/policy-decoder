@@ -56,5 +56,7 @@ object Main extends ZIOAppDefault:
       Repo.layer,
       FontiRepo.layer,
       HttpClient.layer,
-      Server.defaultWithPort(porta),
+      Server.defaultWith(
+        _.port(porta).copy(requestStreaming = RequestStreaming.Disabled(20 * 1024 * 1024)),
+      ),
     )

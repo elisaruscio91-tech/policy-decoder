@@ -127,25 +127,34 @@ object MotoreIA:
     }
 
   /** Ripara un JSON troncato (può succedere se la risposta del modello supera
-    * max_tokens): rimuove l'ultimo valore incompleto e richiude le parentesi
-    * rimaste aperte.
+    * max_tokens): il troncamento avviene quasi sempre a metà di un valore
+    * stringa lungo (es. un campo di testo libero), lasciando una virgoletta
+    * di apertura senza quella di chiusura — caso che va gestito PRIMA di
+    * richiudere parentesi/quadre, altrimenti il JSON risultante resta
+    * sintatticamente non valido. Rimuove poi un'eventuale virgola finale
+    * pendente (campo incompleto) e richiude le parentesi rimaste aperte.
     */
   private def riparaJsonTroncato(frammento: String): String =
-    val senzaCoda = frammento.replaceAll(""",\s*[^{}\[\],"]*$""", "")
-    var graffe = 0
-    var quadre = 0
-    for ch <- senzaCoda do
-      ch match
-        case '{' => graffe += 1
-        case '}' => graffe -= 1
-        case '[' => quadre += 1
-        case ']' => quadre -= 1
-        case _   => ()
-    val sb = new StringBuilder(senzaCoda)
-    while quadre > 0 do
-      sb.append(']'); quadre -= 1
-    while graffe > 0 do
-      sb.append('}'); graffe -= 1
+    var dentroStringa      = false
+    var precedenteBackslash = false
+    val pila = scala.collection.mutable.ArrayDeque.empty[Char]
+    for ch <- frammento do
+      if dentroStringa then
+        if precedenteBackslash then precedenteBackslash = false
+        else if ch == '\\' then precedenteBackslash = true
+        else if ch == '"' then dentroStringa = false
+      else
+        ch match
+          case '"'       => dentroStringa = true
+          case '{' | '[' => pila.append(ch)
+          case '}' | ']' => if pila.nonEmpty then pila.removeLast()
+          case _         => ()
+
+    val conStringaChiusa = if dentroStringa then frammento + "\"" else frammento
+    val senzaCoda         = conStringaChiusa.replaceAll(""",\s*[^{}\[\],"]*$""", "")
+    val sb                = new StringBuilder(senzaCoda)
+    while pila.nonEmpty do
+      sb.append(if pila.removeLast() == '{' then '}' else ']')
     sb.toString
 
   def estraiJson[T](raw: String)(using Decoder[T]): Task[T] =

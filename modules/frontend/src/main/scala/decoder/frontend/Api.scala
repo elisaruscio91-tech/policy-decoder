@@ -92,3 +92,14 @@ object Api:
       .apply(req)
       .send(backend)
       .map(_.body.map { case (bytes, _, _) => bytes })
+
+  // Stesso timeout di analyze: un PDF di qualche MB può impiegare più di 60s
+  // a essere letto/estratto sul server se la connessione è lenta.
+  def uploadPdf(token: String, nomeFile: String, bytes: Array[Byte]): Future[Either[(StatusCode, ErroreApi), Articolo]] =
+    interpreter
+      .toSecureRequestThrowDecodeFailures(Endpoints.uploadPdf, baseUri)
+      .apply(token)
+      .apply((nomeFile, bytes, ""))
+      .readTimeout(TIMEOUT_ANALISI)
+      .send(backend)
+      .map(_.body)

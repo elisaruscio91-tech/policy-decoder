@@ -2,9 +2,11 @@ package decoder.frontend
 
 import com.raquo.laminar.api.L.*
 import decoder.shared.*
+import org.scalajs.dom
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.scalajs.js.typedarray.{ArrayBuffer, Uint8Array}
 import scala.util.{Failure, Success}
 
 // Vista principale: tab testo/url, selettore lingua di output, invio
@@ -43,6 +45,25 @@ object AnalyzeView:
       )
     else messaggioSicuro(raw)
 
+  // Legge un File scelto dall'utente (tab "Documento") come bytes grezzi via
+  // FileReader.readAsArrayBuffer — l'API più compatibile per questo in
+  // scalajs-dom, a differenza del più recente Blob.arrayBuffer() (Promise).
+  private def leggiFileComeBytes(file: dom.File): Future[Array[Byte]] =
+    val promise = Promise[Array[Byte]]()
+    val reader  = new dom.FileReader()
+    reader.onload = (_: dom.Event) =>
+      val buffer = reader.result.asInstanceOf[ArrayBuffer]
+      val vista  = new Uint8Array(buffer)
+      val bytes  = new Array[Byte](vista.length)
+      var i      = 0
+      while i < vista.length do
+        bytes(i) = vista(i).toByte
+        i += 1
+      promise.success(bytes)
+    reader.onerror = (_: dom.Event) => promise.failure(new RuntimeException("Errore di lettura del file"))
+    reader.readAsArrayBuffer(file)
+    promise.future
+
   // Palette di colori per punteggio di rischio / gravità / verdetto,
   // ripresa 1:1 dalla vecchia versione React.
   private def coloreRischio(score: Int): String =
@@ -71,9 +92,10 @@ object AnalyzeView:
     logout: () => Unit,
     aggiornaQuota: String => Unit,
   ): HtmlElement =
-    val modeVar      = Var("testo") // "testo" | "url"
+    val modeVar      = Var("testo") // "testo" | "url" | "documento"
     val testoVar     = Var("")
     val urlVar       = Var("")
+    val fileVar      = Var(Option.empty[dom.File])
     val linguaVar    = Var("auto") // "auto" | "en" | "it"
     val risultatoVar = Var(Option.empty[RisultatoAnalisi])
     val erroreVar    = Var(Option.empty[String])
@@ -81,12 +103,32 @@ object AnalyzeView:
     val pdfInCorsoVar = Var(false)
 
     def recuperaTesto(): Future[Either[String, (String, String)]] =
-      if modeVar.now() == "url" then
-        Api.fetchUrl(token, FetchUrlRequest(urlVar.now().trim)).map {
-          case Right(art)     => Right((art.testo, "url"))
-          case Left((_, err)) => Left(err.error)
-        }
-      else Future.successful(Right((testoVar.now().trim, "testo")))
+      modeVar.now() match
+        case "url" =>
+          Api.fetchUrl(token, FetchUrlRequest(urlVar.now().trim)).map {
+            case Right(art)     => Right((art.testo, "url"))
+            case Left((_, err)) => Left(err.error)
+          }
+        case "documento" =>
+          fileVar.now() match
+            case None => Future.successful(Left(I18n.now("Seleziona un file PDF da analizzare.", "Select a PDF file to analyze.")))
+            case Some(file) =>
+              leggiFileComeBytes(file)
+                .flatMap { bytes =>
+                  // Il nome del file va in un header HTTP (vedi Endpoints.uploadPdf):
+                  // gli header accettano solo ASCII, encodeURIComponent evita un
+                  // errore del browser se il nome contiene accenti o altri
+                  // caratteri non-ASCII (es. "città.pdf").
+                  val nomeCodificato = scala.scalajs.js.URIUtils.encodeURIComponent(file.name)
+                  Api.uploadPdf(token, nomeCodificato, bytes).map {
+                    case Right(art)     => Right((art.testo, "documento"))
+                    case Left((_, err)) => Left(err.error)
+                  }
+                }
+                .recover { case _ =>
+                  Left(I18n.now("Impossibile leggere il file selezionato.", "Could not read the selected file."))
+                }
+        case _ => Future.successful(Right((testoVar.now().trim, "testo")))
 
     def submit(): Unit =
       erroreVar.set(None)
@@ -326,6 +368,11 @@ object AnalyzeView:
             onClick --> (_ => modeVar.set("url")),
             "URL",
           ),
+          button(
+            cls.toggle("attivo") <-- modeVar.signal.map(_ == "documento"),
+            onClick --> (_ => modeVar.set("documento")),
+            child.text <-- I18n.tr("Documento", "Document"),
+          ),
         ),
         div(
           child <-- modeVar.signal.map {
@@ -335,6 +382,25 @@ object AnalyzeView:
                 placeholder := "https://...",
                 onInput.mapToValue --> urlVar.writer,
                 value <-- urlVar.signal,
+              ): HtmlElement
+            case "documento" =>
+              div(
+                input(
+                  typ := "file",
+                  accept := "application/pdf",
+                  onChange --> { ev =>
+                    val inputEl = ev.target.asInstanceOf[dom.html.Input]
+                    val file    = Option(inputEl.files).filter(_.length > 0).map(_(0))
+                    fileVar.set(file)
+                  },
+                ),
+                p(
+                  cls := "nota-upload",
+                  child.text <-- I18n.tr(
+                    "Solo PDF, max 10MB. I documenti molto lunghi vengono analizzati solo nella prima parte (circa 200.000 caratteri).",
+                    "PDF only, max 10MB. Very long documents are analyzed only up to their first part (about 200,000 characters).",
+                  ),
+                ),
               ): HtmlElement
             case _ =>
               textArea(

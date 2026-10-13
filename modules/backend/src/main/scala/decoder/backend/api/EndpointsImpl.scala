@@ -1,6 +1,6 @@
 package decoder.backend.api
 
-import decoder.backend.articolo.EstraiArticolo
+import decoder.backend.articolo.{EstraiArticolo, EstraiPdf}
 import decoder.backend.config.AppConfig
 import decoder.backend.db.{AnalisiRichiesta, Repo, RichiestaAccesso}
 import decoder.backend.email.EmailService
@@ -34,14 +34,26 @@ object EndpointsImpl:
 
   private val ENDPOINT_ANALYZE = "/api/analyze"
   private val ENDPOINT_FETCH   = "/api/fetch-url"
+  private val ENDPOINT_UPLOAD  = "/api/upload-pdf"
   private val LIMITE_ANALYZE   = 30
   private val LIMITE_FETCH     = 20
+  private val LIMITE_UPLOAD    = 10
   private val FINESTRA_MINUTI  = 10
   // Stesso limite del testo estratto da URL (vedi MAX_CARATTERI_URL): non
   // c'è più motivo di tenerlo più basso, un utente può incollare un articolo
   // lungo tanto quanto uno che verrebbe estratto automaticamente.
   private val MAX_CARATTERI_INPUT = 60_000
   private val MAX_CARATTERI_URL = 60_000
+  // I documenti caricati (PDF) possono essere molto più lunghi di un
+  // articolo web — tipicamente un report o un capitolo di libro, non
+  // l'intera opera. Limite più alto ma comunque ben sotto la finestra di
+  // contesto del modello configurato (Claude Sonnet 4.6, ~200k token) una
+  // volta sommati prompt di sistema, eventuale contesto RAG e gli 8192 token
+  // riservati all'output (vedi MotoreIA.MAX_TOKENS): ~200.000 caratteri
+  // equivalgono approssimativamente a 50-60k token, ampio margine di
+  // sicurezza, non un calcolo esatto. Un libro di centinaia di pagine supera
+  // comunque questo limite e viene troncato (a fine parola, come per URL).
+  private val MAX_CARATTERI_DOCUMENTO = 200_000
   private val LINGUE_VALIDE = Set("auto", "en", "it")
   private val EMAIL_ASSISTENZA = "elisa.ruscio@proton.me"
   private val MSG_ERRORE_GENERICO =
@@ -92,6 +104,9 @@ object EndpointsImpl:
       (StatusCode.UnprocessableEntity, ErroreApi(decoder.shared.CodiciErrore.SitoBloccatoLettura))
     case err: EstraiArticolo.ErroreArticolo =>
       (StatusCode.UnprocessableEntity, ErroreApi(Option(err.getMessage).map(messaggioPubblico).getOrElse("Impossibile recuperare l'articolo")))
+    case e: EstraiPdf.PdfTroppoGrandeException => (StatusCode.PayloadTooLarge, ErroreApi(e.getMessage))
+    case e: EstraiPdf.PdfNonValidoException =>
+      (StatusCode.UnprocessableEntity, ErroreApi(messaggioPubblico(Option(e.getMessage).getOrElse("PDF non valido"))))
     case _ => (StatusCode.InternalServerError, ErroreApi(messaggioPubblico(Option(e.getMessage).getOrElse(""))))
 
   private def securityLogic(token: String): ZIO[Env, (StatusCode, ErroreApi), Auth.Utente] =
@@ -181,15 +196,20 @@ object EndpointsImpl:
 
   private def analyzeLogic(utente: Auth.Utente)(input: (AnalyzeRequest, String)): ZIO[Env, (StatusCode, ErroreApi), AnalyzeResponse] =
     val (req, ip) = input
-    val modalita   = if req.modalita == "url" then "url" else "testo"
+    val modalita = req.modalita match
+      case "url"       => "url"
+      case "documento" => "documento"
+      case _           => "testo"
     val outputLang = if LINGUE_VALIDE.contains(req.outputLang) then req.outputLang else "auto"
-    // Gli articoli estratti da URL vengono troncati (a fine parola, non a
-    // metà) invece che rifiutati — vedi commento su MAX_CARATTERI_URL.
+    // Gli articoli estratti da URL o documento vengono troncati (a fine
+    // parola, non a metà) invece che rifiutati — vedi commento su
+    // MAX_CARATTERI_URL/MAX_CARATTERI_DOCUMENTO.
+    val limiteTroncamento = if modalita == "documento" then MAX_CARATTERI_DOCUMENTO else MAX_CARATTERI_URL
     val testoGrezzo = req.testo.trim
     val testo =
-      if modalita != "url" || testoGrezzo.length <= MAX_CARATTERI_URL then testoGrezzo
+      if modalita == "testo" || testoGrezzo.length <= limiteTroncamento then testoGrezzo
       else
-        val tagliato = testoGrezzo.take(MAX_CARATTERI_URL)
+        val tagliato = testoGrezzo.take(limiteTroncamento)
         val fineParola = tagliato.lastIndexWhere(_.isWhitespace)
         if fineParola > 0 then tagliato.substring(0, fineParola) else tagliato
 
@@ -202,11 +222,11 @@ object EndpointsImpl:
         _ <- ZIO.when(testo.isEmpty)(
           Sicurezza.registraEvento(ip, ENDPOINT_ANALYZE, "fallimento") *> ZIO.fail(TestoMancanteException),
         )
-        // Il testo da URL è già stato troncato sopra a MAX_CARATTERI_URL: qui
-        // si rifiuta solo il testo incollato a mano che superi il limite più
+        // Il testo da URL/documento è già stato troncato sopra: qui si
+        // rifiuta solo il testo incollato a mano che superi il limite più
         // basso (l'utente può accorciarlo lui stesso, a differenza di un
-        // articolo estratto).
-        _ <- ZIO.when(modalita != "url" && testo.length > MAX_CARATTERI_INPUT)(
+        // articolo/documento estratto).
+        _ <- ZIO.when(modalita == "testo" && testo.length > MAX_CARATTERI_INPUT)(
           Sicurezza.registraEvento(ip, ENDPOINT_ANALYZE, "fallimento") *> ZIO.fail(TestoTroppoLungoException(MAX_CARATTERI_INPUT)),
         )
         quota <- Quota.statoQuota(utente.id, utente.email)
@@ -310,11 +330,34 @@ object EndpointsImpl:
 
     effetto.mapError(mappaErrore)
 
+  private def uploadPdfLogic(utente: Auth.Utente)(input: (String, Array[Byte], String)): ZIO[Env, (StatusCode, ErroreApi), Articolo] =
+    val (nomeFile, bytes, ip) = input
+
+    val effetto: RIO[Env, Articolo] =
+      for
+        limitato <- Sicurezza.superaLimite(ip, ENDPOINT_UPLOAD, LIMITE_UPLOAD, FINESTRA_MINUTI)
+        _ <- ZIO.when(limitato)(
+          Sicurezza.registraEvento(ip, ENDPOINT_UPLOAD, "rate-limited") *> ZIO.fail(RateLimitedException),
+        )
+        articolo <- EstraiPdf.estraiArticolo(bytes, nomeFile).foldZIO(
+          errore =>
+            val msg = Option(errore.getMessage).getOrElse("Estrazione PDF fallita")
+            ZIO.logWarning(s"upload-pdf fallito: $msg") *>
+            Sicurezza.registraEvento(ip, ENDPOINT_UPLOAD, "fallimento") *> ZIO.fail(errore),
+          art => Sicurezza.registraEvento(ip, ENDPOINT_UPLOAD, "successo").as(art),
+        )
+      yield articolo
+
+    effetto.mapError(mappaErrore)
+
   private val analyzeEndpoint: ZServerEndpoint[Env, Any] =
     Endpoints.analyze.zServerSecurityLogic(securityLogic).serverLogic(utente => analyzeLogic(utente))
 
   private val fetchUrlEndpoint: ZServerEndpoint[Env, Any] =
     Endpoints.fetchUrl.zServerSecurityLogic(securityLogic).serverLogic(utente => fetchUrlLogic(utente))
+
+  private val uploadPdfEndpoint: ZServerEndpoint[Env, Any] =
+    Endpoints.uploadPdf.zServerSecurityLogic(securityLogic).serverLogic(utente => uploadPdfLogic(utente))
 
   // Nessuna chiamata all'IA qui: il client rimanda un RisultatoAnalisi che ha
   // già ricevuto, PdfExport si occupa solo della formattazione. Autenticato
@@ -333,4 +376,4 @@ object EndpointsImpl:
     Endpoints.exportPdf.zServerSecurityLogic(securityLogic).serverLogic(_ => req => exportPdfLogic(req))
 
   val all: List[ZServerEndpoint[Env, Any]] =
-    List(loginEndpoint, richiediAccessoEndpoint, usageEndpoint, analyzeEndpoint, fetchUrlEndpoint, exportPdfEndpoint)
+    List(loginEndpoint, richiediAccessoEndpoint, usageEndpoint, analyzeEndpoint, fetchUrlEndpoint, exportPdfEndpoint, uploadPdfEndpoint)

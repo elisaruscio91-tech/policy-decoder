@@ -87,4 +87,20 @@ object Endpoints:
       .out(header[String]("Content-Disposition"))
       .errorOut(statusCode.and(jsonBody[ErroreApi]))
 
-  val all: List[AnyEndpoint] = List(login, richiediAccesso, usage, analyze, fetchUrl, exportPdf)
+  // Tab "Documento": il client manda i bytes grezzi del PDF scelto dall'utente
+  // (niente JSON/base64, per evitare il +33% di dimensione che comporterebbe)
+  // più il nome del file in un header, perché byteArrayBody da solo non porta
+  // metadati. Il backend estrae il testo (vedi EstraiPdf) e lo restituisce
+  // come un Articolo, esattamente come fetchUrl: il frontend può trattare i
+  // due flussi allo stesso modo prima di passare il testo a /api/analyze.
+  val uploadPdf =
+    endpoint.post
+      .securityIn(auth.bearer[String]())
+      .in(apiBase / "upload-pdf")
+      .in(header[String]("X-Nome-File"))
+      .in(byteArrayBody)
+      .in(ip)
+      .out(jsonBody[Articolo])
+      .errorOut(statusCode.and(jsonBody[ErroreApi]))
+
+  val all: List[AnyEndpoint] = List(login, richiediAccesso, usage, analyze, fetchUrl, exportPdf, uploadPdf)

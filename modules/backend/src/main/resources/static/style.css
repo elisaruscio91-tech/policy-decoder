@@ -286,6 +286,25 @@ select {
   font-size: 12px;
 }
 
+input[type="file"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  background: var(--superficie);
+  border: 1.5px solid var(--bordo);
+  border-radius: 12px;
+  color: var(--testo-debole);
+  margin: 0.5rem 0;
+  font-size: 13px;
+}
+
+.nota-upload {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--testo-debole);
+  margin: 0 0 0.5rem;
+}
+
 textarea:focus,
 input:focus,
 select:focus {

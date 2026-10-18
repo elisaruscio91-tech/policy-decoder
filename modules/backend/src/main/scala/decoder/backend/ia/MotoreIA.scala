@@ -14,7 +14,12 @@ import zio.*
 // codice che chiama chiamaModello(). Porta 1:1 di src/lib/motore-ia.ts.
 object MotoreIA:
 
-  private val MAX_TOKENS = 8192
+  // Alzato da 8192 a 10000 dopo l'aggiunta della sezione normativa_italiana:
+  // il suo output extra (4 enti, ognuno con articoli) spingeva risposte
+  // prima entro i limiti a superare 8192, causando troncamenti che
+  // riparaJsonTroncato non sempre riesce a sanare (es. taglio a metà di un
+  // nome di campo, non di un valore stringa).
+  private val MAX_TOKENS = 10000
   // Il timeout di default del backend HTTP (60s) è troppo basso per
   // un'analisi con output fino a MAX_TOKENS: il modello può impiegare
   // più tempo di una chiamata API qualunque. Costruita esplicitamente

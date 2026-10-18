@@ -163,4 +163,4 @@ OUTPUT FORMAT: Respond ONLY with valid JSON. No markdown, no backticks, no pream
 
 Generate 3-6 rhetoric items, 3-6 factcheck items, 3-5 counter_narrative items, exactly 5 slides, 2-4 legal items. For normativa_italiana, exactly 4 items (one per body) when the section applies, or omit the key entirely otherwise.
 
-CRITICAL: Keep the total JSON response under 7000 tokens. Be concise in analysis fields — each should be 1-3 sentences, not paragraphs. Prioritize precision over verbosity."""
+CRITICAL: Keep the total JSON response under 8500 tokens. Be concise in analysis fields — each should be 1-3 sentences, not paragraphs. Prioritize precision over verbosity. For normativa_italiana especially, keep every "violazione"/"motivazione_non_applicabile" to one short sentence — this section is extra and must not crowd out the rest of the response."""

@@ -78,6 +78,24 @@ final case class Slide(emoji: Option[String], title: Option[String], body: Optio
 object Slide:
   given Codec[Slide] = deriveCodec
 
+// Sezione "Conformità normativa italiana": solo per testi di stampa/dichiarazioni
+// in lingua italiana (mai per contenuti in altre lingue o non giornalistici —
+// vedi istruzione nel prompt). Gli articoli citati provengono da un elenco
+// chiuso e verificato incorporato nel prompt stesso (ODG, AGCOM, IAP, Codice
+// del Consumo/Codacons): l'IA non deve mai inventare un numero di articolo.
+final case class ArticoloViolato(numero: Option[String], titolo: Option[String], violazione: Option[String])
+object ArticoloViolato:
+  given Codec[ArticoloViolato] = deriveCodec
+
+final case class NormativaItaliana(
+  ente: Option[String], // "Ordine dei Giornalisti" | "AGCOM" | "IAP" | "Codacons / Codice del Consumo"
+  applicabile: Option[Boolean],
+  motivazione_non_applicabile: Option[String],
+  articoli: Option[List[ArticoloViolato]],
+)
+object NormativaItaliana:
+  given Codec[NormativaItaliana] = deriveCodec
+
 final case class RisultatoAnalisi(
   summary: Option[Summary],
   danger_score: Option[DangerScore],
@@ -86,6 +104,7 @@ final case class RisultatoAnalisi(
   legal: Option[List[Legal]],
   counter_narrative: Option[List[CounterNarrative]],
   slides: Option[List[Slide]],
+  normativa_italiana: Option[List[NormativaItaliana]],
 )
 object RisultatoAnalisi:
   given Codec[RisultatoAnalisi] = deriveCodec

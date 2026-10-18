@@ -296,6 +296,39 @@ object AnalyzeView:
             ),
           ),
         ),
+        r.normativa_italiana.filter(_.nonEmpty).map(items =>
+          sezione(
+            I18n.tr("Conformità normativa italiana", "Italian regulatory compliance"),
+            ul(
+              items.map { it =>
+                val applicabile = it.applicabile.getOrElse(false)
+                val colore      = if applicabile then "#16a34a" else "#64748b"
+                val etichetta   = if applicabile then "APPLICABILE" else "NON APPLICABILE"
+                val corpo =
+                  if applicabile then
+                    div(
+                      it.articoli.getOrElse(Nil).map(a =>
+                        p(
+                          b(a.numero.getOrElse("")),
+                          " — ",
+                          b(a.titolo.getOrElse("")),
+                          ": ",
+                          a.violazione.getOrElse(""),
+                        ),
+                      ),
+                    )
+                  else
+                    div(p(cls := "fonte", it.motivazione_non_applicabile.getOrElse("")))
+                li(
+                  cls := "legale-item",
+                  h3(it.ente.getOrElse("")),
+                  span(cls := "verdetto", styleAttr := s"--colore-verdetto: $colore", etichetta),
+                  corpo,
+                )
+              },
+            ),
+          ),
+        ),
         r.slides.filter(_.nonEmpty).map(items =>
           sezione(
             I18n.tr("Testo suggerito per slide social", "Suggested text for social slides"),

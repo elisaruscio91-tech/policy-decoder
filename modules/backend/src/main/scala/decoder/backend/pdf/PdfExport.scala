@@ -257,6 +257,24 @@ object PdfExport:
             }
           }
         }
+        r.normativa_italiana.filter(_.nonEmpty).foreach { items =>
+          w.scriviIntestazioneSezione(t("Conformità normativa italiana", "Italian regulatory compliance"))
+          items.foreach { el =>
+            val applicabile = el.applicabile.getOrElse(false)
+            blocco(if applicabile then COL_AZZURRO else COL_TESTO_DEBOLE) {
+              el.ente.foreach(v => w.scriviParagrafo(v, fontSezione, 12f, colore = COL_AZZURRO))
+              if applicabile then
+                el.articoli.getOrElse(Nil).foreach { a =>
+                  val riga = s"${a.numero.getOrElse("")} - ${a.titolo.getOrElse("")}: ${a.violazione.getOrElse("")}"
+                  w.scriviParagrafo(riga, colore = COL_TESTO_MUTO)
+                }
+              else
+                el.motivazione_non_applicabile.foreach(v =>
+                  w.scriviParagrafo(v, fontCorsivo, 10f, colore = COL_TESTO_DEBOLE),
+                )
+            }
+          }
+        }
 
       r.slides.filter(_.nonEmpty).foreach { items =>
         w.scriviIntestazioneSezione(t("Testo suggerito per slide social", "Suggested text for social slides"))

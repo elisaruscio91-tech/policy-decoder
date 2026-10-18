@@ -3,6 +3,10 @@ import org.scalajs.linker.interface.ModuleSplitStyle
 ThisBuild / scalaVersion := "3.3.4"
 ThisBuild / organization := "org.acet"
 ThisBuild / version      := "3.0.0"
+// Lo schema Tapir/circe di AnalyzeResponse ha superato la profondità di
+// inlining di default (32) dopo l'aggiunta di normativa_italiana (liste
+// annidate di case class Option-heavy): va alzato il limite, non il codice.
+ThisBuild / scalacOptions ++= Seq("-Xmax-inlines", "64")
 
 // Dipendenze condivise dalle versioni per evitare conflitti tra i moduli.
 val zioVersion      = "2.1.9"

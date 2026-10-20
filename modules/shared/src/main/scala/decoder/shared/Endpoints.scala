@@ -47,8 +47,12 @@ object Endpoints:
       .out(jsonBody[MessaggioOk])
       .errorOut(statusCode.and(jsonBody[ErroreApi]))
 
+  // POST e non GET di proposito: Main.staticRoutes è un catch-all `GET /
+  // trailing` che, essendo più specifico del catch-all di Tapir, intercetta
+  // ogni GET /api/* e risponde 500 (risorsa statica inesistente). I POST non
+  // lo incrociano mai.
   val usage =
-    endpoint.get
+    endpoint.post
       .securityIn(auth.bearer[String]())
       .in(apiBase / "usage")
       .out(jsonBody[Quota])

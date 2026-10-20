@@ -190,7 +190,10 @@ object EndpointsImpl:
 
   private val usageEndpoint: ZServerEndpoint[Env, Any] =
     Endpoints.usage.zServerSecurityLogic(securityLogic).serverLogic { utente => _ =>
-      val effetto: RIO[Env, QuotaDto] = Quota.statoQuota(utente.id, utente.email)
+      // tapErrorCause (non tapError) per vedere anche i difetti non tipizzati:
+      // il 500 su /api/usage non lasciava alcuna traccia nei log.
+      val effetto: RIO[Env, QuotaDto] =
+        Quota.statoQuota(utente.id, utente.email).tapErrorCause(c => ZIO.logWarning(s"usage fallito: ${c.prettyPrint.take(1500)}"))
       effetto.mapError(mappaErrore)
     }
 

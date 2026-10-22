@@ -48,4 +48,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 # (crash silenzioso, non un'eccezione gestita). Un tetto esplicito fa sì che
 # sia la JVM stessa a gestire l'esaurimento della memoria (OutOfMemoryError,
 # visibile nei log) invece del kernel.
-ENTRYPOINT ["java", "-Xmx512m", "-jar", "app.jar"]
+# -Dorg.asynchttpclient.enabledProtocols: l'async-http-client usato per
+# scaricare gli articoli da URL, di default, non offre TLS 1.3 nell'handshake;
+# i siti che accettano SOLO TLS 1.3 (es. jkrowling.com) rispondevano con
+# "protocol_version" e il fetch falliva ("Exception when sending request").
+ENTRYPOINT ["java", "-Xmx512m", "-Dorg.asynchttpclient.enabledProtocols=TLSv1.3,TLSv1.2", "-jar", "app.jar"]

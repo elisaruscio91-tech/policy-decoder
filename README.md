@@ -1,17 +1,81 @@
 # Policy Decoder
 
-Strumento di analisi testi (propaganda, retorica, fact-check) a supporto della
-tutela dei diritti delle persone transgender e non binarie. Login riservato
-(whitelist, niente registrazione self-service), quota mensile per utente,
-motore di analisi configurabile (Anthropic, OpenRouter, o Ollama self-hosted).
+**Uno strumento di analisi che smonta la propaganda anti-trans nei testi, nei media e nelle dichiarazioni pubbliche, mettendo a disposizione le prove per segnalarla.**
 
-Riscrittura completa in **Scala 3 + ZIO + Tapir + Laminar (ScalaJS) + Quill**
-della versione precedente (Next.js + Prisma): stessa logica di business,
-stack più semplice da mantenere ed eseguire come un singolo processo JVM.
-Nessuna pretesa estetica sul frontend ("minimo minimo", vedi sotto) — il
-valore dello strumento è nell'analisi, non nell'interfaccia.
+Sito: <https://policy-decoder.com> (accesso su richiesta, vedi [Accesso](#accesso)) ·
+Sviluppato per [ACET](https://associazionetransgenere.org) da Elisa Ruscio.
 
-## Indice
+## Il problema
+
+I testi che attaccano i diritti delle persone transgender e non binarie sono
+spesso costruiti con cura: citazioni selezionate, dati fuori contesto, studi
+presentati come più solidi di quanto siano, una retorica emotiva che fa
+sembrare un'opinione un fatto. Smontarli a mano richiede ore di lavoro di una
+persona esperta. Policy Decoder automatizza la prima analisi e la rende
+ripetibile, con le fonti a portata di mano.
+
+## Cosa fa
+
+Si incolla un testo, un link o un PDF e si ottiene un'analisi strutturata in
+sezioni:
+
+| Sezione | Contenuto |
+| --- | --- |
+| **Sommario** | cosa dichiara il testo e qual è l'intento reale |
+| **Livello di pericolo** | punteggio da 0 a 100 con motivazione |
+| **Tecniche retoriche** | le tecniche di persuasione usate, con le citazioni |
+| **Fact-check** | verifica delle affermazioni, con fonti verificabili |
+| **Contesto legale** | le norme e i principi giuridici coinvolti |
+| **Contro-narrazione** | la risposta fattuale, pronta da usare |
+| **Conformità normativa italiana** | per articoli e dichiarazioni in italiano: i punti precisi che violano il codice deontologico dei giornalisti (ODG), il codice dell'autodisciplina pubblicitaria (IAP), il Codice del Consumo, con l'articolo citato, per preparare segnalazioni formali |
+| **Slide** | sintesi pensata per essere condivisa |
+
+L'analisi si esporta in PDF. L'interfaccia è in italiano e in inglese.
+
+### Come è stata costruita l'affidabilità
+
+Uno strumento che cita leggi e studi deve evitare di inventarli. Le scelte
+principali:
+
+- **Elenchi chiusi di riferimenti.** Gli articoli normativi (ODG, IAP, Codice
+  del Consumo) sono verificati sui testi ufficiali e inseriti nel prompt come
+  elenco chiuso: al modello è vietato citare qualcosa che non c'è.
+- **Nessuna sezione forzata.** Se un testo non è italiano o non è un testo
+  giornalistico, la sezione sulla conformità normativa viene omessa. Se un ente
+  non ha competenza (per esempio AGCOM sulla stampa), l'analisi lo dice invece
+  di inventare una violazione.
+- **Archivio fonti (RAG).** Documenti di riferimento caricati da un
+  amministratore, indicizzati su Postgres con pgvector e iniettati nel
+  contesto dell'analisi, così le fonti non dipendono da una ricerca live sul web.
+- **Risposte troncate recuperate.** Se il modello esaurisce lo spazio di
+  output a metà JSON, il server ripara la risposta invece di scartarla.
+- **Protezioni sul recupero degli articoli.** Il download da URL blocca indirizzi
+  interni e privati (anti-SSRF), anche dopo risoluzione DNS e redirect.
+
+## Stack
+
+- **Backend:** Scala 3, ZIO, zio-http, Tapir, Quill, circe
+- **Frontend:** Laminar (Scala.js), un'unica SPA servita dallo stesso processo
+- **Dati:** PostgreSQL con pgvector e migrazioni Flyway
+- **IA:** motore configurabile: Anthropic, OpenRouter o Ollama self-hosted
+- **Infrastruttura:** Docker, Coolify su VPS Hetzner, Cloudflare davanti
+- **Sicurezza:** password con bcrypt, 2FA TOTP opzionale, JWT, rate limiting
+  per IP, quota mensile per utente
+
+Il contratto tra frontend e backend (path, metodi, forma del JSON) è definito
+una volta sola in un modulo condiviso JVM+JS, e il client del browser è
+generato da quelle stesse definizioni.
+
+## Accesso
+
+Lo strumento è ad accesso riservato. Dalla pagina di login si può inviare una
+richiesta di accesso, che viene approvata manualmente; l'uso prevede un
+abbonamento o una donazione ad ACET.
+
+## Documentazione tecnica
+
+Il resto di questo file è la documentazione per chi sviluppa o gestisce
+l'istanza.
 
 - [Architettura](#architettura)
 - [File per file](#file-per-file)
@@ -43,19 +107,23 @@ Autenticazione: email + password (bcrypt) + 2FA opzionale (TOTP, RFC 6238),
 sessione **JWT stateless** in `sessionStorage` del browser, rimandato come
 header `Authorization: Bearer <token>` — nessun cookie, nessun endpoint di
 logout lato server (vedi [Trade-off consapevoli](#trade-off-consapevoli)).
-Account creati/rinnovati solo via CLI (`InvitaUtente`/`Abilita2fa`), nessuna
-registrazione self-service: lo strumento è ad accesso riservato.
+Gli account si creano/rinnovano da CLI (`InvitaUtente`/`Abilita2fa`); chi non
+ne ha uno può inviare una richiesta di accesso dal form "Registrati", che
+finisce in una coda approvata a mano (`GestisciRichieste`): nessun account è
+attivo senza approvazione.
 
 ## File per file
 
 ### `modules/shared` — contratto condiviso tra backend e frontend
 
 - **`Dto.scala`** — tutti i DTO scambiati via JSON (circe), incluso
-  `RisultatoAnalisi` con le 7 sezioni prodotte dal motore di analisi
+  `RisultatoAnalisi` con le sezioni prodotte dal motore di analisi
   (summary, danger_score, rhetoric, factcheck, legal, counter_narrative,
-  slides). Stesso contratto JSON già in uso nella versione precedente.
-- **`Endpoints.scala`** — le 4 definizioni Tapir (`login`, `usage`, `analyze`,
-  `fetchUrl`): un solo posto dove path, metodi HTTP e shape del JSON sono
+  slides, normativa_italiana). Tutte opzionali: una sezione assente nel JSON
+  del modello è semplicemente `None`.
+- **`Endpoints.scala`** — le definizioni Tapir (`login`, `richiediAccesso`,
+  `usage`, `analyze`, `fetchUrl`, `exportPdf`, `uploadPdf`): un solo posto
+  dove path, metodi HTTP e shape del JSON sono
   tenuti sincronizzati tra backend (che le implementa) e frontend (che ne
   genera un client sttp). L'IP del chiamante è estratto dall'header
   `X-Forwarded-For` via `extractFromRequest` — trasparente sul wire, ma il
@@ -67,9 +135,11 @@ registrazione self-service: lo strumento è ad accesso riservato.
 - **`Main.scala`** — entry point: esegue le migrazioni Flyway, poi avvia
   zio-http servendo sia le rotte API (Tapir) sia i file statici del
   frontend compilato (`resources/static/`, copiati lì durante la build
-  Docker). **File più a rischio della riscrittura** (API zio-http cambiate
-  più volte tra versioni, non compilabile in questo ambiente): se
-  `sbt compile` fallisce, guardare qui per primo.
+  Docker). Le rotte statiche sono un catch-all `GET /*`, più specifico del
+  catch-all di Tapir: per questo gli endpoint dell'API devono essere POST
+  (un GET sotto `/api` verrebbe intercettato dalla rotta statica e
+  risponderebbe 500). È il punto da guardare se un nuovo endpoint "non
+  risponde".
 - **`config/AppConfig.scala`** — legge `application.conf` (Typesafe Config),
   espone porta, JWT secret, connection string Postgres, configurazione del
   motore IA (provider + credenziali per Anthropic/OpenRouter/Ollama), quota
@@ -173,7 +243,7 @@ registrazione self-service: lo strumento è ad accesso riservato.
   helper per leggere/scrivere token ed email in `sessionStorage`.
 - **`LoginView.scala`** — form email/password/codice 2FA opzionale.
 - **`AnalyzeView.scala`** — vista principale: tab testo/URL, selettore
-  lingua di output, invio analisi, rendering delle 7 sezioni del risultato.
+  lingua di output, invio analisi, rendering delle sezioni del risultato.
   Nessuna pretesa di replicare pixel-per-pixel la UI React precedente
   (645 righe): stessa logica, presentazione essenziale.
 
@@ -210,8 +280,8 @@ Dockerfile in produzione).
 
 ## CLI di amministrazione
 
-Nessuna registrazione self-service: gli account si creano/rinnovano da riga
-di comando.
+Gli account si creano/rinnovano da riga di comando; le richieste di accesso
+dal form pubblico si approvano con `GestisciRichieste`.
 
 ```bash
 # Crea/rinnova un account con scadenza (es. abbonamento mensile)
@@ -223,6 +293,11 @@ sbt "backend/runMain decoder.backend.cli.InvitaUtente admin@esempio.it password1
 
 # Abilita il 2FA su un account già esistente (stampa un QR ASCII da scansionare)
 sbt "backend/runMain decoder.backend.cli.Abilita2fa utente@esempio.it"
+
+# Richieste di accesso arrivate dal form "Registrati"
+sbt "backend/runMain decoder.backend.cli.GestisciRichieste lista"
+sbt "backend/runMain decoder.backend.cli.GestisciRichieste approva utente@esempio.it 1 5"
+sbt "backend/runMain decoder.backend.cli.GestisciRichieste rifiuta utente@esempio.it"
 ```
 
 ## Archivio fonti (RAG)
@@ -303,7 +378,12 @@ Postgres di produzione).
   scarica l'intero corpo prima di controllarne la dimensione, invece di
   troncare in streaming. Scelta deliberata per non aggiungere una
   dipendenza fs2/zio-streams per un solo controllo difensivo.
-- **Codice non compiler-verificato in alcune aree**: scritto senza una
-  toolchain JVM/Scala locale disponibile. `Main.scala` (API zio-http) e le
-  interazioni con la libreria Readability4J sono le aree con maggiore
-  incertezza — vedi i commenti nel codice per i dettagli.
+- **Nessuna pipeline di test automatici**: la verifica avviene al build
+  (compilazione completa nel `Dockerfile`) e con prove manuali in produzione.
+  Per un progetto di queste dimensioni e con un solo manutentore è una scelta
+  di costo/beneficio, non un ideale.
+- **Analisi in una sola richiesta HTTP**: l'analisi può durare un paio di
+  minuti e viene restituita in un'unica risposta. Da telefono la connessione
+  può cadere se lo schermo si spegne o si cambia app. Il passo successivo
+  naturale sarebbe un'esecuzione in background con controllo periodico del
+  risultato.
